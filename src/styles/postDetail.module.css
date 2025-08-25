@@ -1,0 +1,59 @@
+/* src/styles/postDetail.module.css */
+
+.container {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.title {
+  margin: 4px 0 0;
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.metaRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: #666;
+  font-size: 13px;
+}
+
+/* 착용 제품 영역 */
+.wearSection {
+  padding-top: 4px;
+}
+
+.wearTitle {
+  font-size: 80%;
+  font-weight: 700;
+  color: #222;
+  margin-bottom: 6px;
+}
+
+.wearList {
+  margin: 0;
+  padding-left: 18px;
+  list-style: disc;
+  color: #333;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.wearItem {
+  margin-bottom: 4px;
+}
+
+.wearLink {
+  color: #0b69ff;
+  text-decoration: none;
+}
+
+.body {
+  margin: 8px 0 0;
+  color: #333;
+  font-size: 14px;
+  white-space: pre-line;
+}

@@ -155,29 +155,6 @@ html, body {
   object-fit: cover;
 }
 
-/* ==== FEED GRID (메인 3열) ==== */
-.feed-grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;              /* 필요하면 4~8px 사이에서 조정 */
-  padding: 8px;          /* 바깥 여백 살짝 */
-}
-
-/* 카드(썸네일) 공통 */
-.feed-card {
-  border-radius: 10px;
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid rgba(0,0,0,0.06);
-}
-
-/* 썸네일도 1:1 강제 */
-.feed-thumb {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  background: #e9ecf1;
-}
 @supports not (aspect-ratio: 1 / 1) {
   .feed-thumb::before {
     content: "";
