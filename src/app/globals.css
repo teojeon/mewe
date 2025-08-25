@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body { height: 100%; }
+
+/* 공통 카드/버튼 스타일 */
+.card { @apply rounded-2xl border bg-white shadow-sm; }
+.card-hover { @apply transition hover:shadow-md hover:-translate-y-0.5; }
+
+.btn { @apply inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium bg-white hover:bg-neutral-50 active:scale-[.99] transition; }
+.input { @apply w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200; }
+
+/* 프로필 헤더 */
+.profile-wrap { @apply max-w-screen-lg mx-auto px-3 sm:px-4; }
+.profile-title { @apply text-2xl font-semibold text-center; }
+.profile-handle { @apply text-sm text-neutral-500 text-center; }
+
+/* 말풍선/필 버튼 (main.png 느낌) */
+.pill { @apply inline-flex items-center gap-2 rounded-2xl border px-3 py-2 bg-white shadow-sm text-sm; }
+.pill-ghost { @apply bg-neutral-50; }
+
+/* 인스타 그리드 느낌: 정사각형 썸네일 */
+.square { position: relative; width: 100%; padding-bottom: 100%; }
+.square > img, .square > span > img, .square > span > video { position: absolute !important; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* 썸네일 좌측 상단 라벨 (HOT / BEST 등) */
+.thumb-badge { @apply absolute left-1 top-1 text-[10px] font-bold text-white px-2 py-0.5 rounded-md shadow; }
+.thumb-badge-hot { @apply bg-red-500; }
+.thumb-badge-best { @apply bg-yellow-400 text-black; }
