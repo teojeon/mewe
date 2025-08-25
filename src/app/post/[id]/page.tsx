@@ -108,36 +108,36 @@ export default async function PostDetail({
       )}
 
       {/* 착용 제품(meta) — created_at 아래 작은 영역 */}
-      <div className={styles.wearSection}>
-        <div className={styles.wearTitle}>착용 제품</div>
+<div className={styles.wearSection}>
+  <div className={styles.wearTitle}>착용 제품</div>
 
-        {post.wearItems.length > 0 ? (
-          <ul className={styles.wearList}>
-            {post.wearItems.map((it, idx) => {
-              const text = [it.brand, it.name].filter(Boolean).join(" · ");
-              if (!text) return null;
-              return (
-                <li key={idx} className={styles.wearItem}>
-                  {it.link ? (
-                    <a
-                      href={it.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={styles.wearLink}
-                    >
-                      {text}
-                    </a>
-                  ) : (
-                    text
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <div style={{ fontSize: 13, color: "#888" }}>등록된 정보가 없습니다.</div>
-        )}
-      </div>
+  {post.wearItems.length > 0 ? (
+    <ul className={styles.wearList}>
+      {post.wearItems.map((it, idx) => {
+        const text = [it.brand, it.name].filter(Boolean).join(" · ");
+        if (!text) return null;
+        return (
+          <li key={idx} className={styles.wearItem}>
+            <span className={styles.wearText}>{text}</span>
+            {it.link && (
+              <a
+                href={it.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.wearBtn}
+              >
+                제품 더 알아보기
+              </a>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  ) : (
+    <div style={{ fontSize: 13, color: "#888" }}>등록된 정보가 없습니다.</div>
+  )}
+</div>
+
 
       {/* 본문 */}
       {post.body && <p className={styles.body}>{post.body}</p>}

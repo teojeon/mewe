@@ -1,4 +1,9 @@
 /* src/app/globals.css */
+:root {
+  --gap: 16px;
+  --radius: 12px;
+}
+
 
 /* ====== CSS 변수 & 리셋 ====== */
 :root{

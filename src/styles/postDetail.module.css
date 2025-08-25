@@ -33,22 +33,54 @@
   margin-bottom: 6px;
 }
 
+/* 불릿 유지 */
 .wearList {
   margin: 0;
-  padding-left: 18px;
+  padding-left: 18px; /* 불릿 여백 */
   list-style: disc;
   color: #333;
   font-size: 14px;
   line-height: 1.4;
 }
 
+/* 각 행: 텍스트와 버튼을 좌우 배치, 간격 10px */
 .wearItem {
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;              /* 요구사항: 10px 간격 */
+  justify-content: space-between;
 }
 
-.wearLink {
+/* 텍스트는 좌측, 줄바꿈 최소화 */
+.wearText {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 버튼: 모던하고 담백한 스타일 */
+.wearBtn {
+  padding: 6px 10px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #fff;
   color: #0b69ff;
+  font-size: 12px;
+  line-height: 1;
   text-decoration: none;
+  border-radius: 8px;       /* 살짝 둥글림으로 다른 요소와 균형 */
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wearBtn:hover {
+  background: #f5f8ff;
+  border-color: rgba(11,105,255,0.3);
+}
+
+.wearBtn:active {
+  transform: translateY(1px);
 }
 
 .body {

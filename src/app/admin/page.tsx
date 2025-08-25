@@ -1,127 +1,143 @@
-"use client";
-import { useState, useEffect } from "react";
-import { createPost, createInfluencer } from "./actions";
+// src/app/admin/page.tsx
+import Link from "next/link";
 import { supabasePublic } from "@/lib/supabase-client";
-import Image from "next/image";
+import styles from "@/styles/admin.module.css";
 
-type Influencer = { id: string; slug: string; name: string };
+type Row = {
+  id: string;
+  title: string | null;
+  published: boolean | null;
+  influencer?: { slug: string | null } | null; // 조인 결과
+};
 
-export default function AdminPage() {
-  const [cover, setCover] = useState("");
-  const [raw, setRaw] = useState(`[
-  {"name": "화이트 티셔츠", "brand": "Uniqlo"}
-]`);
+async function listPosts(q: string) {
+  // posts + influencers.slug 조인 셀렉트
+  // 관계명은 프로젝트마다 다를 수 있어 두 가지 키를 모두 시도합니다.
+  const base = supabasePublic
+    .from("posts")
+    .select(`
+      id,
+      title,
+      published,
+      influencer:influencers ( slug )
+    `) // <-- 만약 이 라인이 에러면 아래 주석의 대안을 사용하세요.
+    .order("created_at", { ascending: false });
 
-  const [influencers, setInfluencers] = useState<Influencer[]>([]);
-  const [infId, setInfId] = useState<string>("");
+  // 제목 검색
+  const { data, error } = q ? await base.ilike("title", `%${q}%`) : await base;
 
-  useEffect(() => {
-    supabasePublic
-      .from("influencers")
-      .select("id, slug, name")
-      .order("created_at", { ascending: false })
-      .then(({ data }) => setInfluencers(data ?? []));
-  }, []);
+  // 조인이 환경에 따라 실패하면 fallback: influencers 테이블에서 slug를 한 번 더 가져오기
+  if (error || !data) {
+    // Fallback: 조인 없이 기본 필드만 가져온 후, 별도 조회로 slug 매핑
+    const { data: rows } = await supabasePublic
+      .from("posts")
+      .select("id,title,published,influencer_id")
+      .order("created_at", { ascending: false });
+    if (!rows) return [];
+
+    // influencer_id 모아서 in() 조회
+    const ids = Array.from(new Set(rows.map((r: any) => r.influencer_id).filter(Boolean)));
+    let slugMap = new Map<string, string | null>();
+    if (ids.length) {
+      const { data: infs } = await supabasePublic
+        .from("influencers")
+        .select("id,slug")
+        .in("id", ids);
+      if (infs) {
+        slugMap = new Map(infs.map((i: any) => [i.id, i.slug]));
+      }
+    }
+
+    return rows.map((r: any) => ({
+      id: r.id,
+      title: r.title,
+      published: r.published,
+      influencer: { slug: slugMap.get(r.influencer_id ?? "") ?? null },
+    }));
+  }
+
+  // 정상 조인 결과
+  return (data as any[]).map((r) => ({
+    id: r.id,
+    title: r.title,
+    published: r.published,
+    influencer: r.influencer ?? null,
+  })) as Row[];
+}
+
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: { q?: string };
+}) {
+  const q = (searchParams?.q ?? "").trim();
+  const rows = await listPosts(q);
 
   return (
-    <main className="mx-auto max-w-2xl space-y-10">
-      <h1 className="text-2xl font-bold">Admin</h1>
-
-      {/* 인플루언서 생성 */}
-      <section className="rounded-2xl border bg-white shadow-sm p-4 space-y-3">
-        <h2 className="font-semibold">인플루언서 생성</h2>
-        <form action={createInfluencer} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <input name="slug" placeholder="slug (예: teo)" required className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200" />
-            <input name="name" placeholder="표시명 (예: Teo)" required className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200" />
-          </div>
-          <input name="avatar_url" placeholder="아바타 이미지 URL" className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200" />
-          <textarea name="bio" placeholder="소개" className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200 min-h-24" />
-          <textarea
-            name="links_json"
-            placeholder='링크 JSON 배열(예: [{"label":"Instagram","url":"https://..."}])'
-            className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200 min-h-24 font-mono text-sm"
+    <div className={styles.wrap}>
+      {/* 헤더 & 툴바 */}
+      <div className={styles.header}>
+        <h1 className={styles.title}>Admin</h1>
+        <form className={styles.toolbar} action="/admin" method="get">
+          <input
+            type="text"
+            name="q"
+            defaultValue={q}
+            placeholder="제목 검색…"
+            className={styles.input}
           />
-          <button type="submit" className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium bg-white hover:bg-neutral-50 transition">
-            생성
-          </button>
+          <button className={styles.btnGhost} type="submit">검색</button>
+          <Link href="/admin/new" className={styles.btn}>
+            새글
+          </Link>
         </form>
-      </section>
+      </div>
 
-      {/* 게시물 생성 */}
-      <section className="rounded-2xl border bg-white shadow-sm p-4 space-y-4">
-        <h2 className="font-semibold">게시물 생성</h2>
-        <form action={createPost} className="space-y-3">
-          <div className="space-y-1">
-            <label className="text-sm font-medium">제목</label>
-            <input name="title" placeholder="제목" required className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200" />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium">커버 이미지 URL</label>
-            <input
-              name="cover_image_url"
-              value={cover}
-              onChange={(e) => setCover(e.target.value)}
-              placeholder="https://..."
-              required
-              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200"
-            />
-            {cover && (
-              <div className="relative">
-                <Image
-                  src={cover}
-                  alt="preview"
-                  width={400}
-                  height={400}
-                  sizes="(max-width: 640px) 90vw, 400px"
-                  className="object-cover w-[400px] h-[400px] block rounded-lg border"
-                />
-              </div>
+      {/* 목록 섹션 */}
+      <section className={styles.section}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th className={styles.th}>제목</th>
+              <th className={styles.th}>상태</th>
+              <th className={styles.th}>인플루언서(slug)</th> {/* ✅ 작성일 대신 slug */}
+              <th className={styles.th}>작업</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id}>
+                <td className={styles.td}>
+                  <Link href={`/post/${r.id}`} className={styles.linkBtn} style={{ border: "none", padding: 0 }}>
+                    {r.title ?? "(제목 없음)"}
+                  </Link>
+                </td>
+                <td className={styles.td}>
+                  <span className={styles.badge}>
+                    {r.published ? "공개" : "비공개"}
+                  </span>
+                </td>
+                <td className={styles.td}>
+                  {r.influencer?.slug ?? "-"}
+                </td>
+                <td className={styles.td}>
+                  <div className={styles.rowActions}>
+                    <Link href={`/admin/edit/${r.id}`} className={styles.linkBtn}>편집</Link>
+                    <Link href={`/admin/delete/${r.id}`} className={styles.linkBtn}>삭제</Link>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td className={styles.td} colSpan={4} style={{ color: "#888" }}>
+                  결과가 없습니다.
+                </td>
+              </tr>
             )}
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium">소속 인플루언서</label>
-            <select
-              name="influencer_id"
-              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200"
-              value={infId}
-              onChange={(e) => setInfId(e.target.value)}
-            >
-              <option value="">(선택 안 함)</option>
-              {influencers.map((inf) => (
-                <option key={inf.id} value={inf.id}>
-                  {inf.name} (@{inf.slug})
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-neutral-500">선택 시 /i/{`{slug}`} 페이지에 이 코디가 표시됩니다.</p>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium">본문(선택)</label>
-            <textarea name="body" placeholder="본문" className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200 min-h-24" />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium">제품 JSON 배열</label>
-            <textarea
-              name="products_json"
-              value={raw}
-              onChange={(e) => setRaw(e.target.value)}
-              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200 min-h-40 font-mono text-sm"
-            />
-            <p className="text-xs text-neutral-500">
-              예: [{"{"}"name":"화이트 티셔츠","brand":"Uniqlo"{"}"}]
-            </p>
-          </div>
-
-          <button type="submit" className="inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium bg-white hover:bg-neutral-50 transition">
-            등록
-          </button>
-        </form>
+          </tbody>
+        </table>
       </section>
-    </main>
+    </div>
   );
 }
