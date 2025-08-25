@@ -1,11 +1,8 @@
-// src/app/page.tsx
 import { supabasePublic } from "@/lib/supabase-client";
 import Link from "next/link";
 import Image from "next/image";
 
 export const revalidate = 0;
-
-type PostMeta = { products?: any[]; tags?: string[] };
 
 export default async function Home() {
   const { data: posts, error } = await supabasePublic
@@ -23,26 +20,30 @@ export default async function Home() {
           <div className="mx-auto h-24 w-24 rounded-full bg-neutral-100 flex items-center justify-center">📷</div>
           <h1 className="text-xl font-semibold">아직 업로드된 코디가 없어요</h1>
           <p className="text-neutral-600">/admin에서 첫 게시물을 등록해보세요.</p>
-          <a className="btn" href="/admin">Admin으로 가기</a>
+          <a className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium bg-white hover:bg-neutral-50 transition" href="/admin">
+            Admin으로 가기
+          </a>
         </div>
       </section>
     );
   }
 
-  // 모바일 2열 → 태블릿 3열 → 데스크톱 5열
+  // 예: 홈은 5열(200px) 그리드
   return (
-    <section className="max-w-screen-xl mx-auto">
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-2 sm:gap-3">
-        {posts.map((p) => {
-          const meta: PostMeta = p.meta ?? {};
-          return (
-            <Link key={p.id} href={`/post/${p.id}`} className="block rounded-lg overflow-hidden bg-white">
-              <div className="square">
-                <Image src={p.cover_image_url} alt={p.title} fill className="object-cover" />
-              </div>
-            </Link>
-          );
-        })}
+    <section className="w-full flex justify-center">
+      <div className="w-[1010px] max-w-full grid grid-cols-3 sm:grid-cols-4 xl:grid-cols-5 gap-[2px] place-items-center px-4">
+        {posts.map((p) => (
+          <Link key={p.id} href={`/post/${p.id}`} className="block bg-white overflow-hidden rounded-md">
+            <Image
+              src={p.cover_image_url}
+              alt={p.title}
+              width={200}
+              height={200}
+              className="object-cover w-[200px] h-[200px] block"
+              sizes="200px"
+            />
+          </Link>
+        ))}
       </div>
     </section>
   );
