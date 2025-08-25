@@ -1,106 +1,118 @@
-import { supabasePublic } from "@/lib/supabase-client";
+// src/app/i/[slug]/page.tsx
 import Image from "next/image";
 import Link from "next/link";
+import { supabasePublic } from "@/lib/supabase-client";
+import styles from "@/styles/feed.module.css";
 
-export const revalidate = 0;
+type Influencer = {
+  id: string;
+  name: string | null;
+  bio: string | null;
+};
 
-type LinkItem = { label: string; url: string; icon?: string };
-type PostMeta = { products?: any[]; tags?: string[] };
+type PostRow = {
+  id: string;
+  title: string | null;
+  cover_image_url: string | null;
+  created_at?: string | null;
+};
 
-export default async function InfluencerPage({ params }: { params: { slug: string } }) {
-  // 인플루언서 정보
-  const { data: influencer, error: infErr } = await supabasePublic
+async function getInfluencerBySlug(slug: string): Promise<Influencer | null> {
+  const { data, error } = await supabasePublic
     .from("influencers")
-    .select("*")
-    .eq("slug", params.slug)
-    .single();
+    .select("id,name,bio")
+    .eq("slug", slug)
+    .single<Influencer>();
 
-  if (infErr || !influencer) {
-    return <main className="p-6">존재하지 않는 인플루언서입니다.</main>;
-  }
+  if (error || !data) return null;
+  return data;
+}
 
-  // 해당 인플루언서의 공개 포스트
-  const { data: posts } = await supabasePublic
+async function listByInfluencerId(influencerId: string): Promise<PostRow[]> {
+  const { data, error } = await supabasePublic
     .from("posts")
-    .select("id, title, cover_image_url, meta, created_at")
+    .select("id,title,cover_image_url,created_at,published,influencer_id")
     .eq("published", true)
-    .eq("influencer_id", influencer.id)
+    .eq("influencer_id", influencerId)
     .order("created_at", { ascending: false });
 
-  const links: LinkItem[] = Array.isArray(influencer.links) ? influencer.links : [];
+  if (error || !data) return [];
+  return data as PostRow[];
+}
+
+export default async function Page({ params }: { params: { slug: string } }) {
+  const influencer = await getInfluencerBySlug(params.slug);
+  const items = influencer ? await listByInfluencerId(influencer.id) : [];
 
   return (
-    <main className="space-y-6">
-      {/* 헤더: 모바일/PC 동일, 가운데 정렬 (avatar 미표시) */}
-      <section className="w-full flex justify-center pt-4 px-4">
-        <div className="w-[640px] max-w-full text-center">
-          <h1 className="text-xl font-semibold">{influencer.name ?? `@${influencer.slug}`}</h1>
-          <p className="text-sm text-neutral-500">@{influencer.slug}</p>
-        </div>
+    <div>
+      {/* 1) 상단 100px: name + bio */}
+      <section
+        style={{
+          height: 100,
+          padding: "12px",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          gap: 6,
+          borderBottom: "1px solid rgba(0,0,0,0.06)",
+          background: "#fff",
+        }}
+      >
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 18,
+            lineHeight: 1.2,
+            fontWeight: 700,
+          }}
+        >
+          {influencer?.name ?? params.slug}
+        </h2>
+        {influencer?.bio ? (
+          <p
+            style={{
+              margin: 0,
+              fontSize: 13,
+              color: "#555",
+              lineHeight: 1.4,
+              whiteSpace: "pre-line",
+            }}
+          >
+            {influencer.bio}
+          </p>
+        ) : (
+          <p style={{ margin: 0, fontSize: 13, color: "#888" }}>소개가 없습니다.</p>
+        )}
       </section>
 
-      {/* 소개: 가운데 정렬, 모바일 우선, avatar 미표시 */}
-      <section className="w-full flex justify-center px-4">
-        <div className="w-[640px] max-w-full rounded-2xl border bg-white shadow-sm p-4 space-y-3 text-center">
-          {influencer.bio && (
-            <p className="text-neutral-700 whitespace-pre-wrap">{influencer.bio}</p>
-          )}
-          {links.length > 0 && (
-            <div className="grid gap-2">
-              {links.map((l, i) => (
-                <a
-                  key={i}
-                  href={l.url}
-                  target="_blank"
-                  className="inline-flex items-center gap-2 justify-center rounded-2xl border px-3 py-2 bg-white shadow-sm text-sm"
-                >
-                  <span className="text-lg">{l.icon ?? ""}</span>
-                  <span className="truncate">{l.label}</span>
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
+      {/* 2) 그 아래 150px 빈 공간 */}
+      <div style={{ height: 150 }} />
 
-      {/* 피드: 항상 3열, 고정 썸네일 200×200, 가운데 정렬 (모바일/PC 동일) */}
-      <section className="w-full flex justify-center px-4">
-        {/* 200px × 3열 + 간격(2px × 2) = 총 약 604px → 컨테이너를 고정폭으로 중앙 배치 */}
-        <div className="w-[606px] max-w-full grid grid-cols-3 gap-[2px] place-items-center">
-          {(posts ?? []).map((p) => {
-            const meta: PostMeta = p.meta ?? {};
-            return (
-              <Link
-                key={p.id}
-                href={`/post/${p.id}`}
-                className="block bg-white overflow-hidden rounded-md"
-              >
-                {/* fill 제거, 고정 크기 지정으로 확대 방지 */}
-                <Image
-                  src={p.cover_image_url}
-                  alt={p.title}
-                  width={200}
-                  height={200}
-                  className="object-cover w-[200px] h-[200px] block"
-                  sizes="200px"
-                />
+      {/* 3) 포스트 그리드: 3열, 1px 간격(모서리 각짐) */}
+      <section className={styles.grid3}>
+        {items
+          .filter((it) => !!it.cover_image_url)
+          .map((item) => (
+            <article
+              key={item.id}
+              className={styles.card}
+              aria-label={item.title ?? ""}
+            >
+              <Link href={`/post/${item.id}`} title={item.title ?? ""}>
+                <div className={styles.thumb}>
+                  <Image
+                    src={item.cover_image_url as string}
+                    alt={item.title ?? ""}
+                    fill
+                    sizes="(max-width: 440px) 33vw, 146px"
+                    className={styles.imgFill}
+                  />
+                </div>
               </Link>
-            );
-          })}
-          {(!posts || posts.length === 0) && (
-            <div className="col-span-3 text-center text-neutral-500 py-10">
-              아직 등록된 코디가 없습니다.
-            </div>
-          )}
-        </div>
+            </article>
+          ))}
       </section>
-
-      {/* 하단 링크 */}
-      <section className="w-full flex justify-center px-4">
-        <div className="w-[640px] max-w-full text-center">
-          <Link className="text-sm underline" href="/">홈으로</Link>
-        </div>
-      </section>
-    </main>
+    </div>
   );
 }

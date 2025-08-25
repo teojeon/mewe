@@ -1,72 +1,89 @@
-import { supabasePublic } from "@/lib/supabase-client";
+// src/app/post/[id]/page.tsx
 import Image from "next/image";
-import Link from "next/link";
+import { supabasePublic } from "@/lib/supabase-client";
 
-type Product = {
-  name: string;
-  brand?: string;
-  price?: number;
-  currency?: string;
-  external_url?: string;
-  image_url?: string;
+type PostRow = {
+  id: string;
+  title: string | null;
+  cover_image_url: string;   // 스키마 기준
+  body: string | null;
+  created_at: string | null;
 };
 
-export const revalidate = 0;
-
-export default async function PostPage({ params }: { params: { id: string } }) {
-  const { data: post, error } = await supabasePublic
+async function getPost(id: string) {
+  const { data, error } = await supabasePublic
     .from("posts")
-    .select("*")
-    .eq("id", params.id)
+    .select("id,title,cover_image_url,body,created_at")
+    .eq("id", id)
+    .eq("published", true)
     .single();
 
-  if (error) return <main className="p-6">에러: {error.message}</main>;
-  if (!post) return <main className="p-6">존재하지 않는 게시물</main>;
+  if (error || !data) {
+    throw new Error("Post not found");
+  }
 
-  const products: Product[] = post.meta?.products ?? [];
+  return {
+    id: data.id,
+    title: data.title ?? "",
+    imageUrl: data.cover_image_url,
+    body: data.body,
+    created_at: data.created_at,
+  };
+}
+
+export default async function PostDetail({
+  params,
+}: {
+  params: { id: string };
+}) {
+  const post = await getPost(params.id);
 
   return (
-    <article className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Link href="/" className="btn">← 목록</Link>
-        <span className="text-xs text-neutral-500">{new Date(post.created_at).toLocaleString()}</span>
+    <section style={{ display: "grid", gap: 12, padding: 12 }}>
+      {/* 가로 폭 기준 정사각형 크롭 */}
+      <div className="square">
+        {post.imageUrl ? (
+          <Image
+            src={post.imageUrl}
+            alt={post.title || "post image"}
+            fill
+            sizes="(max-width: 440px) 100vw, 440px"
+            className="square-fill"
+            priority
+          />
+        ) : (
+          <div
+            className="square-fill"
+            style={{ display: "grid", placeItems: "center", color: "#99a3ad" }}
+          >
+            이미지 없음
+          </div>
+        )}
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="relative aspect-square">
-          <Image src={post.cover_image_url} alt={post.title} fill className="object-cover" />
+      <h1 style={{ margin: "4px 0 0", fontSize: 18, lineHeight: 1.3 }}>
+        {post.title}
+      </h1>
+
+      {post.created_at && (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            color: "#666",
+            fontSize: 13,
+          }}
+        >
+          <time dateTime={post.created_at}>{post.created_at}</time>
         </div>
-        {post.body && <div className="p-4 text-neutral-700 whitespace-pre-wrap">{post.body}</div>}
-      </div>
-
-      {!!products.length && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-semibold">착용 제품</h2>
-          <ul className="grid gap-4 sm:grid-cols-2">
-            {products.map((prd, i) => (
-              <li key={i} className="card p-3">
-                <div className="flex gap-3 items-center">
-                  {prd.image_url && (
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden border">
-                      <Image src={prd.image_url} alt={prd.name} fill className="object-cover" />
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{prd.name}</div>
-                    {prd.brand && <div className="text-sm text-neutral-500">{prd.brand}</div>}
-                    {prd.price != null && (
-                      <div className="text-sm">{Number(prd.price).toLocaleString()} {prd.currency ?? "KRW"}</div>
-                    )}
-                    {prd.external_url && (
-                      <a className="text-sm underline" href={prd.external_url} target="_blank">제품 보러가기</a>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
-    </article>
+
+      {post.body && (
+        <p style={{ margin: "8px 0 0", color: "#333", fontSize: 14 }}>
+          {post.body}
+        </p>
+      )}
+    </section>
   );
 }

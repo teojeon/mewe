@@ -1,30 +1,191 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* src/app/globals.css */
 
-html, body { height: 100%; }
+/* ====== CSS 변수 & 리셋 ====== */
+:root{
+  /* “유동 고정 폭” 가드레일 */
+  --app-min: 360px;       /* 소형 기기 최소 폭 */
+  --app-ideal: 92vw;      /* 화면 폭의 92% */
+  --app-max: 440px;       /* 데스크톱/대형 폰 상한 */
+  --app-bg: #ffffff;
+  --page-bg: #f6f7f9;
+  --border: rgba(0,0,0,0.08);
+  --shadow: 0 10px 30px rgba(0,0,0,0.08);
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+  --header-h: 56px;
+  --tabbar-h: 56px;
+}
 
-/* 공통 카드/버튼 스타일 */
-.card { @apply rounded-2xl border bg-white shadow-sm; }
-.card-hover { @apply transition hover:shadow-md hover:-translate-y-0.5; }
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  background: var(--page-bg);
+  color: #111;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Apple SD Gothic Neo, "Noto Sans KR", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 
-.btn { @apply inline-flex items-center justify-center rounded-xl border px-4 py-2 text-sm font-medium bg-white hover:bg-neutral-50 active:scale-[.99] transition; }
-.input { @apply w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-neutral-200; }
+/* ====== 앱 컨테이너 ====== */
+#app-root{
+  width: clamp(var(--app-min), var(--app-ideal), var(--app-max));
+  min-height: 100svh; /* 100vh 대신 svh/dvh로 주소창 변화 대응 */
+  margin: 0 auto;
+  background: var(--app-bg);
+  position: relative;
+  box-shadow: 0 0 0 1px var(--border), var(--shadow);
+  padding-top: max(var(--safe-top), 0px);
+  /* 하단 탭바 공간 확보 */
+  padding-bottom: max(var(--tabbar-h), var(--safe-bottom));
+  overflow: clip; /* iOS에서 테두리 밖 그림자/오버플로우 깔끔하게 */
+  display: flex;
+  flex-direction: column;
+}
 
-/* 프로필 헤더 */
-.profile-wrap { @apply max-w-screen-lg mx-auto px-3 sm:px-4; }
-.profile-title { @apply text-2xl font-semibold text-center; }
-.profile-handle { @apply text-sm text-neutral-500 text-center; }
+/* 데스크톱 미관 업그레이드 */
+@media (min-width: 768px) {
+  #app-root {
+    border-radius: 16px;
+    margin: 24px auto;
+  }
+}
 
-/* 말풍선/필 버튼 (main.png 느낌) */
-.pill { @apply inline-flex items-center gap-2 rounded-2xl border px-3 py-2 bg-white shadow-sm text-sm; }
-.pill-ghost { @apply bg-neutral-50; }
+/* ====== 본문(main) 영역 ====== */
+.app-main{
+  min-height: calc(100dvh - var(--header-h) - var(--tabbar-h) - max(var(--safe-top), 0px));
+  padding: 12px 12px 16px;
+}
 
-/* 인스타 그리드 느낌: 정사각형 썸네일 */
-.square { position: relative; width: 100%; padding-bottom: 100%; }
-.square > img, .square > span > img, .square > span > video { position: absolute !important; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* ====== 상단 헤더 ====== */
+.app-header{
+  position: sticky;
+  top: 0;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: color-mix(in srgb, #ffffff 88%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+  z-index: 50;
+}
 
-/* 썸네일 좌측 상단 라벨 (HOT / BEST 등) */
-.thumb-badge { @apply absolute left-1 top-1 text-[10px] font-bold text-white px-2 py-0.5 rounded-md shadow; }
-.thumb-badge-hot { @apply bg-red-500; }
-.thumb-badge-best { @apply bg-yellow-400 text-black; }
+/* ====== 하단 탭바 ====== */
+.app-tabbar{
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  width: clamp(var(--app-min), var(--app-ideal), var(--app-max));
+  height: var(--tabbar-h);
+  background: #fff;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding-bottom: max(var(--safe-bottom), 0px);
+  z-index: 60;
+}
+
+/* 탭 버튼 공통 */
+.tab-btn{
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  color: #222;
+  font-size: 11px;
+  line-height: 1;
+}
+.tab-btn:active { transform: translateY(1px) scale(0.98); opacity: 0.9; }
+.tab-btn[aria-current="page"] { color: #111; font-weight: 600; }
+
+/* 아이콘 크기 */
+.icon-24{ width: 24px; height: 24px; display: inline-block; }
+
+/* ====== 유틸 ====== */
+.img-cover { width: 100%; height: 100%; object-fit: cover; }
+.truncate-1{
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+/* 스크롤바 정리(데스크톱) */
+@media (pointer: fine) {
+  ::-webkit-scrollbar{ width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb{ background: #d6d9de; border-radius: 999px; }
+  ::-webkit-scrollbar-track{ background: transparent; }
+}
+
+/* ==== SQUARE IMAGE UTILS (상세/썸네일 공통) ==== */
+/* 컨테이너 폭을 기준으로 1:1 정사각형 영역 생성 */
+.square {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #e9ecf1;
+}
+
+/* 구형 브라우저 fallback */
+@supports not (aspect-ratio: 1 / 1) {
+  .square::before {
+    content: "";
+    display: block;
+    padding-top: 100%;
+  }
+  .square > * {
+    position: absolute;
+    inset: 0;
+  }
+}
+
+/* 내부 이미지를 컨테이너(정사각형)로 꽉 채우기 */
+.square-fill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ==== FEED GRID (메인 3열) ==== */
+.feed-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;              /* 필요하면 4~8px 사이에서 조정 */
+  padding: 8px;          /* 바깥 여백 살짝 */
+}
+
+/* 카드(썸네일) 공통 */
+.feed-card {
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+/* 썸네일도 1:1 강제 */
+.feed-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #e9ecf1;
+}
+@supports not (aspect-ratio: 1 / 1) {
+  .feed-thumb::before {
+    content: "";
+    display: block;
+    padding-top: 100%;
+  }
+  .feed-thumb > * {
+    position: absolute;
+    inset: 0;
+  }
+}

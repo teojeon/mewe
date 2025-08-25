@@ -1,50 +1,68 @@
-import { supabasePublic } from "@/lib/supabase-client";
-import Link from "next/link";
+// src/app/page.tsx
 import Image from "next/image";
+import Link from "next/link";
+import { supabasePublic } from "@/lib/supabase-client";
+import styles from "@/styles/feed.module.css";
 
-export const revalidate = 0;
+type Row = {
+  id: string;
+  title: string | null;
+  cover_image_url: string;   // 현재 스키마 기준
+  created_at: string;
+};
+
+async function listFeed() {
+  const { data, error } = await supabasePublic
+    .from("posts")
+    .select("id,title,cover_image_url,created_at,published")
+    .eq("published", true)
+    .order("created_at", { ascending: false })
+    .limit(60);
+
+  if (error || !data) return [];
+
+  return data.map((r) => ({
+    id: r.id,
+    title: r.title ?? "",
+    imageUrl: r.cover_image_url,
+  }));
+}
 
 export default async function Home() {
-  const { data: posts, error } = await supabasePublic
-    .from("posts")
-    .select("id, title, cover_image_url, meta, created_at")
-    .eq("published", true)
-    .order("created_at", { ascending: false });
+  const items = await listFeed();
 
-  if (error) return <main className="p-6">에러: {error.message}</main>;
-
-  if (!posts?.length) {
-    return (
-      <section className="min-h-[calc(100vh-8rem)] grid place-content-center">
-        <div className="text-center space-y-4">
-          <div className="mx-auto h-24 w-24 rounded-full bg-neutral-100 flex items-center justify-center">📷</div>
-          <h1 className="text-xl font-semibold">아직 업로드된 코디가 없어요</h1>
-          <p className="text-neutral-600">/admin에서 첫 게시물을 등록해보세요.</p>
-          <a className="inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium bg-white hover:bg-neutral-50 transition" href="/admin">
-            Admin으로 가기
-          </a>
-        </div>
-      </section>
-    );
-  }
-
-  // 예: 홈은 5열(200px) 그리드
   return (
-    <section className="w-full flex justify-center">
-      <div className="w-[1010px] max-w-full grid grid-cols-3 sm:grid-cols-4 xl:grid-cols-5 gap-[2px] place-items-center px-4">
-        {posts.map((p) => (
-          <Link key={p.id} href={`/post/${p.id}`} className="block bg-white overflow-hidden rounded-md">
-            <Image
-              src={p.cover_image_url}
-              alt={p.title}
-              width={200}
-              height={200}
-              className="object-cover w-[200px] h-[200px] block"
-              sizes="200px"
-            />
+    <section className={styles.grid3}>
+      {items.map((item) => (
+        <article key={item.id} className={styles.card} aria-label={item.title}>
+          <Link href={`/post/${item.id}`} title={item.title}>
+            <div className={styles.thumb}>
+              {item.imageUrl ? (
+                <Image
+                  src={item.imageUrl}
+                  alt={item.title}
+                  fill
+                  sizes="(max-width: 440px) 33vw, 146px" /* 3열 기준 힌트 */
+                  className={styles.imgFill}
+                />
+              ) : (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "grid",
+                    placeItems: "center",
+                    color: "#99a3ad",
+                    background: "#e9ecf1",
+                  }}
+                >
+                  이미지 없음
+                </div>
+              )}
+            </div>
           </Link>
-        ))}
-      </div>
+        </article>
+      ))}
     </section>
   );
 }
