@@ -1,147 +1,132 @@
 // src/app/post/[id]/page.tsx
 import Image from "next/image";
+import Link from "next/link";
 import { supabasePublic } from "@/lib/supabase-client";
-import styles from "@/styles/postDetail.module.css";
+import styles from "@/styles/post.module.css";
+import feedStyles from "@/styles/feed.module.css"; // .linkBtn 재사용
 
 type PostRow = {
   id: string;
+  influencer_id: string;
   title: string | null;
   cover_image_url: string | null;
   body: string | null;
-  meta?: unknown;               // jsonb 혹은 문자열 JSON
-  created_at: string | null;
+  meta: any | null; // { products?: {brand,name,link}[] }
 };
 
-function parseWearItems(meta: unknown): Array<{ brand?: string; name?: string; link?: string }> {
-  try {
-    const v: any = typeof meta === "string" ? JSON.parse(meta) : meta;
-    if (!v) return [];
+type Influencer = {
+  id: string;
+  name: string | null;
+  slug: string | null;
+  // title 같은 필드는 사용하지 않음 (의도적으로 배제)
+};
 
-    const normalize = (n: any) => {
-      if (n == null) return {};
-      if (typeof n !== "object") return { name: String(n) };
-      const link = n.link || n.url || n.product_link || n.href;
-      return { brand: n.brand, name: n.name, link };
-    };
-
-    if (Array.isArray(v)) return v.map(normalize);
-
-    const keys = ["products", "items", "wear", "list"];
-    for (const k of keys) {
-      const arr = v?.[k];
-      if (Array.isArray(arr)) return arr.map(normalize);
-    }
-
-    if (typeof v === "object" && ("brand" in v || "name" in v)) return [normalize(v)];
-
-    if (typeof v === "object") {
-      const out: Array<{ brand?: string; name?: string; link?: string }> = [];
-      for (const [k, val] of Object.entries(v)) {
-        if (val == null) continue;
-        if (typeof val === "string") out.push({ brand: k, name: val });
-        else out.push(normalize(val));
-      }
-      if (out.length) return out;
-    }
-  } catch { /* ignore */ }
-  return [];
-}
-
-async function getPost(id: string) {
+async function getPostById(id: string): Promise<PostRow | null> {
   const { data, error } = await supabasePublic
     .from("posts")
-    .select("id,title,cover_image_url,body,meta,created_at")
+    .select("id,influencer_id,title,cover_image_url,body,meta")
     .eq("id", id)
-    .eq("published", true)
-    .single<PostRow>();
+    .maybeSingle();
 
-  if (error || !data) {
-    throw new Error("Post not found");
+  if (error) {
+    console.error(error);
+    return null;
   }
-
-  const wearItems = parseWearItems(data.meta);
-  return {
-    id: data.id,
-    title: data.title ?? "",
-    imageUrl: data.cover_image_url ?? undefined,
-    body: data.body,
-    created_at: data.created_at,
-    wearItems,
-  };
+  return (data as PostRow) ?? null;
 }
 
-export default async function PostDetail({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const post = await getPost(params.id);
+async function getInfluencerById(id: string): Promise<Influencer | null> {
+  const { data, error } = await supabasePublic
+    .from("influencers")
+    .select("id,name,slug") // ✅ title 등 기타 필드 불러오지 않음
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    console.error(error);
+    return null;
+  }
+  return (data as Influencer) ?? null;
+}
+
+export default async function Page({ params }: { params: { id: string } }) {
+  const post = await getPostById(params.id);
+  if (!post) {
+    return (
+      <main className={styles.wrap}>
+        <div className={styles.empty}>게시글을 찾을 수 없습니다.</div>
+      </main>
+    );
+  }
+
+  const influencer = await getInfluencerById(post.influencer_id);
+  const products: Array<{ brand?: string; name?: string; link?: string }> =
+    post.meta?.products ?? [];
 
   return (
-    <section className={styles.container}>
-      {/* 메인 이미지: 가로 폭 기준 정사각형 크롭 (globals.css의 .square / .square-fill 사용) */}
-      <div className="square">
-        {post.imageUrl ? (
+    <main className={styles.wrap}>
+      {/* 상단: mewe/검색 대신 인플루언서 Name (폰트 크기 기존 유지) */}
+      <header className={styles.topbar}>
+        <div className={styles.topTitle}>{influencer?.name ?? ""}</div>
+      </header>
+
+      {/* 커버 이미지 */}
+      {post.cover_image_url ? (
+        <div className={styles.cover}>
           <Image
-            src={post.imageUrl}
-            alt={post.title || "post image"}
+            src={post.cover_image_url}
+            alt={post.title ?? ""}
             fill
-            sizes="(max-width: 440px) 100vw, 440px"
-            className="square-fill"
-            priority
+            sizes="100vw"
+            className={styles.coverImg}
           />
-        ) : (
-          <div className="square-fill" style={{ display: "grid", placeItems: "center", color: "#99a3ad" }}>
-            이미지 없음
-          </div>
-        )}
-      </div>
-
-      {/* 제목 */}
-      <h1 className={styles.title}>{post.title}</h1>
-
-      {/* 작성일 등 메타 */}
-      {post.created_at && (
-        <div className={styles.metaRow}>
-          <time dateTime={post.created_at}>{post.created_at}</time>
         </div>
+      ) : null}
+
+      {/* created_at 표시 제거(렌더 안 함) */}
+
+      {/* 본문 텍스트 */}
+      {post.body ? <div className={styles.body}>{post.body}</div> : null}
+
+      {/* 착용 제품 리스트 - 모던 카드형 */}
+      {products.length > 0 && (
+        <section className={styles.products}>
+          <h2 className={styles.sectionTitle}>착용 제품</h2>
+          <ol className={styles.prodList}>
+            {products.map((p, idx) => {
+              const brand = p.brand?.trim() ?? "";
+              const name = p.name?.trim() ?? "";
+              const link = p.link?.trim() ?? "";
+              const hasLink = !!link;
+
+              return (
+                <li key={idx} className={styles.prodItem}>
+                  <div className={styles.num}>{idx + 1}</div>
+
+                  <div className={styles.prodMeta}>
+                    <div className={styles.prodLine}>
+                      {brand && <span className={styles.brand}>{brand}</span>}
+                      {(brand && name) && <span className={styles.dot}>|</span>}
+                      {name && <span className={styles.prodName}>{name}</span>}
+                    </div>
+
+                    {hasLink && (
+                      <a
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`${feedStyles.linkBtn} ${styles.prodLink}`} // ✅ 크기 살짝 다운
+                      >
+                        제품 더 알아보기
+                      </a>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
       )}
-
-      {/* 착용 제품(meta) — created_at 아래 작은 영역 */}
-<div className={styles.wearSection}>
-  <div className={styles.wearTitle}>착용 제품</div>
-
-  {post.wearItems.length > 0 ? (
-    <ul className={styles.wearList}>
-      {post.wearItems.map((it, idx) => {
-        const text = [it.brand, it.name].filter(Boolean).join(" | ");
-        if (!text) return null;
-        return (
-          <li key={idx} className={styles.wearItem}>
-            <span className={styles.wearNum}>{idx + 1}</span>
-            <span className={styles.wearText}>{text}</span>
-            {it.link && (
-              <a
-                href={it.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.wearBtn}
-              >
-                제품 더 알아보기
-              </a>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  ) : (
-    <div style={{ fontSize: 13, color: "#888" }}>등록된 정보가 없습니다.</div>
-  )}
-</div>
-
-
-      {/* 본문 */}
-      {post.body && <p className={styles.body}>{post.body}</p>}
-    </section>
+    </main>
   );
 }
