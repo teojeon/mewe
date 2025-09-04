@@ -157,3 +157,37 @@
     0 1px 1px rgba(0,0,0,0.04),
     0 6px 14px rgba(0,0,0,0.06);
 }
+
+/* src/styles/post.module.css 맨 아래 아무 곳이나 추가 */
+.slugLink {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.slugLink:hover { opacity: 0.85; }
+
+/* 상단 바: 좌우 정렬 + 우측 액션 */
+.topbarRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* 우측 액션 버튼들 */
+.actionsRow {
+  display: flex;
+  gap: 8px;
+}
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.1);
+  background: #fff;
+  color: #111;
+  font-size: 13px;
+  text-decoration: none;
+}
+.actionBtn:hover { background: #f7f7f7; }
+.danger { color: #b00020; border-color: rgba(176,0,32,0.25); }

@@ -76,33 +76,38 @@ export default function NewPostPage() {
     );
 
   const create = async () => {
-    setMsg('');
-    if (!authorInfluencerId) {
-      setMsg('author 파라미터가 비어 있습니다.');
-      return;
-    }
-    if (!title.trim()) {
-      setMsg('제목을 입력해 주세요.');
-      return;
-    }
+  const show = (phase: string, e: any) => {
+    const msg = typeof e?.message === 'string' ? e.message : JSON.stringify(e);
+    setMsg(`생성 실패 [${phase}]: ${msg}`);
+  };
 
-    setLoading(true);
+  setMsg('');
+  if (!authorInfluencerId) return setMsg('author 파라미터가 비어 있습니다.');
+  if (!title.trim()) return setMsg('제목을 입력해 주세요.');
+
+  setLoading(true);
+  try {
+    // 0) 로그인/멤버십 가드
     try {
-      // 0) (선택) 클라이언트 가드: 해당 인플루언서 owner/editor인지
       const { data: u } = await supabase.auth.getUser();
       const uid = u?.user?.id;
       if (!uid) throw new Error('로그인이 필요합니다.');
-      const { data: mem } = await supabase
+      const { data: mem, error: memErr } = await supabase
         .from('memberships')
         .select('role')
         .eq('user_id', uid)
         .eq('influencer_id', authorInfluencerId)
         .in('role', ['owner', 'editor'])
         .maybeSingle();
-      if (!mem) throw new Error('권한이 없습니다.');
+      if (memErr) throw memErr;
+      if (!mem) throw new Error('권한이 없습니다. (memberships 미존재)');
+    } catch (e) {
+      return show('멤버십 체크', e);
+    }
 
-      // 1) 커버 업로드(선택)
-      let cover_image_url: string | null = null;
+    // 1) 커버 업로드
+    let cover_image_url: string | null = null;
+    try {
       if (coverFile) {
         const key = makeCoverPath(coverFile.name);
         const { error: upErr } = await supabase.storage
@@ -113,11 +118,16 @@ export default function NewPostPage() {
             contentType: coverFile.type || 'application/octet-stream',
           });
         if (upErr) throw upErr;
-        const { data: pub } = supabase.storage.from('covers').getPublicUrl(key);
+        const { data: pub } = await supabase.storage.from('covers').getPublicUrl(key);
         cover_image_url = pub?.publicUrl ?? null;
       }
+    } catch (e) {
+      return show('커버 업로드', e);
+    }
 
-      // 2) posts.insert — 🔑 author_influencer_id 반드시 포함 (RLS 통과 요건)
+    // 2) posts.insert (여기가 막히면 "table \"posts\"" 문구가 보일 것)
+    let newPostId = '';
+    try {
       const { data: created, error: postErr } = await supabase
         .from('posts')
         .insert({
@@ -129,9 +139,14 @@ export default function NewPostPage() {
         .select('id')
         .single();
       if (postErr) throw postErr;
-      const newPostId = String(created?.id);
+      newPostId = String(created?.id);
+    } catch (e) {
+      return show('posts.insert', e);
+    }
 
-      // 3) 새 제품 upsert → posts_products 연결
+    // 3) products.upsert (막히면 "table \"products\"" 문구)
+    let productIds: string[] = [];
+    try {
       const toUpsert = newProducts
         .map((p) => ({
           brand: (p.brand ?? '').trim(),
@@ -150,27 +165,32 @@ export default function NewPostPage() {
           .upsert(toUpsert, { onConflict: 'slug' })
           .select('id');
         if (upErr) throw upErr;
-
-        const productIds = (upserted ?? []).map((r: any) => String(r.id));
-        if (productIds.length > 0) {
-          const links = productIds.map((pid) => ({
-            post_id: newPostId,
-            product_id: pid,
-          }));
-          const { error: linkErr } =
-            await supabase.from('posts_products').insert(links);
-          if (linkErr) throw linkErr;
-        }
+        productIds = (upserted ?? []).map((r: any) => String(r.id));
       }
-
-      // 4) 완료 → 편집으로 이동(또는 상세 페이지로 교체 가능)
-      router.replace(`/post/${newPostId}/edit`);
-    } catch (e: any) {
-      setMsg(`생성 실패: ${e?.message ?? e}`);
-    } finally {
-      setLoading(false);
+    } catch (e) {
+      return show('products.upsert', e);
     }
-  };
+
+    // 4) posts_products.insert (막히면 "table \"posts_products\"" 문구)
+    try {
+      if (productIds.length > 0) {
+        const links = productIds.map((pid) => ({ post_id: newPostId, product_id: pid }));
+        const { error: linkErr } = await supabase.from('posts_products').insert(links);
+        if (linkErr) throw linkErr;
+      }
+    } catch (e) {
+      return show('posts_products.insert', e);
+    }
+
+    // 5) 성공
+    router.replace(`/post/${newPostId}/edit`);
+  } catch (e: any) {
+    setMsg(`생성 실패: ${e?.message ?? e}`);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <main className={styles.wrap}>
