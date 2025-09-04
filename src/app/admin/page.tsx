@@ -1,205 +1,165 @@
 // src/app/admin/page.tsx
-"use client";
+'use client';
 
-import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
-import { supabasePublic } from "@/lib/supabase-client";
-import styles from "@/styles/admin.module.css";
+import { useEffect, useState, useMemo } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import type { Database } from '@/types/supabase';
 
-type RowInfluencer = { name: string | null; slug: string | null } | null;
+type PostRow = Database['public']['Tables']['posts']['Row'];
+type InfluencerRow = Database['public']['Tables']['influencers']['Row'];
+
+// 화면에서 사용하는 형태로 가공된 타입
+type InfluencerLite = { name: string | null; slug: string | null } | null;
 
 type RowPost = {
-  id: string;
+  id: number;
   title: string | null;
-  created_at: string | null;
+  created_at: string;           // ISO string
   published: boolean | null;
-  influencer_id: string | null;
-  influencers: RowInfluencer; // foreign select
+  influencer_id: number | null;
+  influencers: InfluencerLite;  // ✅ 단일 객체 | null 로 통일
 };
 
-export default function AdminHome() {
+export default function AdminPage() {
+  const supabase = useMemo(() => createClientComponentClient<Database>(), []);
   const [posts, setPosts] = useState<RowPost[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  const fetchPosts = useCallback(async () => {
-    setLoading(true);
-    setMsg(null);
-    try {
-  const { data, error } = await supabasePublic
-    .from("posts")
-    .select(
-      "id,title,created_at,published,influencer_id,influencers(name,slug)"
-    )
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  setPosts((data ?? []) as RowPost[]); // ✅ 안전하게 수정
-} catch (err: any) {
-  setMsg(`목록을 불러오지 못했습니다: ${err?.message ?? err}`);
-} finally {
-  setLoading(false);
-}
-  }, []);
+  const [msg, setMsg] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    const fetchPosts = async () => {
+      try {
+        setLoading(true);
+        setMsg('');
+
+        const { data, error } = await supabase
+          .from('posts')
+          .select(
+            `
+            id,
+            title,
+            created_at,
+            published,
+            influencer_id,
+            influencers (
+              name,
+              slug
+            )
+          `
+          )
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // ✅ influencers가 배열/객체 어떤 형태로 와도 단일 객체 | null 로 정규화
+        const normalized: RowPost[] = (data ?? []).map((row: any) => {
+          const raw = row?.influencers;
+
+          const normalizedInfluencer: InfluencerLite = Array.isArray(raw)
+            ? (raw[0]
+                ? {
+                    name:
+                      typeof raw[0].name === 'string' || raw[0].name === null
+                        ? raw[0].name
+                        : String(raw[0].name ?? ''),
+                    slug:
+                      typeof raw[0].slug === 'string' || raw[0].slug === null
+                        ? raw[0].slug
+                        : String(raw[0].slug ?? ''),
+                  }
+                : null)
+            : raw
+            ? {
+                name:
+                  typeof raw.name === 'string' || raw.name === null
+                    ? raw.name
+                    : String(raw.name ?? ''),
+                slug:
+                  typeof raw.slug === 'string' || raw.slug === null
+                    ? raw.slug
+                    : String(raw.slug ?? ''),
+              }
+            : null;
+
+        return {
+            id: Number(row.id),
+            title: row.title ?? null,
+            created_at: typeof row.created_at === 'string' ? row.created_at : String(row.created_at),
+            published: typeof row.published === 'boolean' ? row.published : Boolean(row.published),
+            influencer_id:
+              row.influencer_id === null || row.influencer_id === undefined
+                ? null
+                : Number(row.influencer_id),
+            influencers: normalizedInfluencer,
+          } as RowPost;
+        });
+
+        // ✅ 강제 캐스팅 제거, 정규화된 값으로 세팅
+        setPosts(normalized);
+      } catch (err: any) {
+        setMsg(`목록을 불러오지 못했습니다: ${err?.message ?? err}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchPosts();
-  }, [fetchPosts]);
-
-  const onDelete = async (id: string) => {
-    const ok = window.confirm("정말 이 게시글을 삭제할까요?");
-    if (!ok) return;
-
-    setMsg(null);
-    try {
-      const { error } = await supabasePublic.from("posts").delete().eq("id", id);
-      if (error) throw error;
-      // 낙관적 업데이트
-      setPosts((prev) => prev.filter((p) => p.id !== id));
-      setMsg("삭제했습니다.");
-    } catch (err: any) {
-      setMsg(`삭제에 실패했습니다: ${err?.message ?? err}`);
-    }
-  };
+  }, [supabase]);
 
   return (
-    <main className={styles.wrap}>
-      <header className={styles.header}>
-        <h1 className={styles.title}>Admin</h1>
-        <div className={styles.actions}>
-          {/* 상단 2개 버튼 분리 유지 */}
-          <Link href="/admin/new-influencer" className={`${styles.btn} ${styles.btnPrimary}`}>
-            신규 인플루언서
-          </Link>
-          <Link href="/admin/new" className={`${styles.btn} ${styles.btnSecondary}`}>
-            새글
-          </Link>
-        </div>
+    <main className="p-6 max-w-5xl mx-auto">
+      <header className="mb-6">
+        <h1 className="text-2xl font-semibold">Admin · Posts</h1>
+        <p className="text-sm text-gray-500">
+          게시물 목록 / 인플루언서 매핑 확인용
+        </p>
       </header>
 
-      {msg && <div className={styles.alert}>{msg}</div>}
-
-      {/* 게시글 현황 리스트 (편집/삭제 등) */}
-      <section aria-label="게시글 현황" style={{ marginTop: 8 }}>
-        <div
-          style={{
-            border: "1px solid rgba(0,0,0,0.08)",
-            borderRadius: 12,
-            overflow: "hidden",
-            background: "#fff",
-          }}
-        >
-          {/* 헤더 행 */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 160px 120px 160px 180px",
-              gap: 0,
-              padding: "10px 12px",
-              borderBottom: "1px solid rgba(0,0,0,0.06)",
-              background: "#fafafa",
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-          >
-            <div>제목</div>
-            <div>인플루언서</div>
-            <div>상태</div>
-            <div>작성일</div>
-            <div style={{ textAlign: "right" }}>작업</div>
-          </div>
-
-          {/* 로딩 / 비어있음 */}
-          {loading ? (
-            <div style={{ padding: "14px 12px", fontSize: 13, color: "#666" }}>
-              불러오는 중...
-            </div>
-          ) : posts.length === 0 ? (
-            <div style={{ padding: "14px 12px", fontSize: 13, color: "#666" }}>
-              게시글이 없습니다.
-            </div>
-          ) : (
-            posts.map((p) => {
-              const influencerName = p.influencers?.name ?? "(이름 없음)";
-              const influencerHandle = p.influencers?.slug
-                ? `@${p.influencers.slug}`
-                : "";
-              const created =
-                p.created_at
-                  ? new Date(p.created_at).toLocaleString()
-                  : "-";
-              return (
-                <div
-                  key={p.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 160px 120px 160px 180px",
-                    gap: 0,
-                    alignItems: "center",
-                    padding: "12px",
-                    borderTop: "1px solid rgba(0,0,0,0.06)",
-                  }}
-                >
-                  {/* 제목 */}
-                  <div style={{ minWidth: 0, fontSize: 14 }}>
-                    <span
-                      title={p.title ?? ""}
-                      style={{
-                        display: "-webkit-box",
-                        WebkitLineClamp: 1,
-                        WebkitBoxOrient: "vertical",
-                        overflow: "hidden",
-                      }}
-                    >
-                      {p.title ?? "(제목 없음)"}
-                    </span>
-                  </div>
-
-                  {/* 인플루언서 */}
-                  <div style={{ fontSize: 13, color: "#555" }}>
-                    {influencerName}{" "}
-                    <span style={{ color: "#888" }}>{influencerHandle}</span>
-                  </div>
-
-                  {/* 상태 */}
-                  <div style={{ fontSize: 13 }}>
-                    {p.published ? "공개" : "비공개"}
-                  </div>
-
-                  {/* 작성일 */}
-                  <div style={{ fontSize: 13, color: "#666" }}>{created}</div>
-
-                  {/* 작업 */}
-                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                    <Link
-                      className={`${styles.btn} ${styles.btnGhost}`}
-                      href={`/admin/edit/${p.id}`}
-                      title="편집"
-                    >
-                      편집
-                    </Link>
-                    <button
-                      className={`${styles.btn} ${styles.btnGhost}`}
-                      onClick={() => onDelete(p.id)}
-                      title="삭제"
-                    >
-                      삭제
-                    </button>
-                    <Link
-                      className={`${styles.btn} ${styles.btnSecondary}`}
-                      href={`/post/${p.id}`}
-                      title="보기"
-                      target="_blank"
-                    >
-                      보기
-                    </Link>
-                  </div>
-                </div>
-              );
-            })
-          )}
+      {loading && <p className="text-gray-600">불러오는 중… ⏳</p>}
+      {msg && !loading && (
+        <div className="rounded-lg bg-red-50 text-red-700 px-4 py-3 mb-4">
+          {msg}
         </div>
-      </section>
+      )}
+
+      {!loading && !msg && posts.length === 0 && (
+        <p className="text-gray-600">데이터가 없습니다.</p>
+      )}
+
+      {!loading && posts.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left font-medium px-4 py-3">ID</th>
+                <th className="text-left font-medium px-4 py-3">Title</th>
+                <th className="text-left font-medium px-4 py-3">Influencer</th>
+                <th className="text-left font-medium px-4 py-3">Published</th>
+                <th className="text-left font-medium px-4 py-3">Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {posts.map((p) => (
+                <tr key={p.id} className="border-t">
+                  <td className="px-4 py-3">{p.id}</td>
+                  <td className="px-4 py-3">{p.title ?? '—'}</td>
+                  <td className="px-4 py-3">
+                    {p.influencers
+                      ? `${p.influencers.name ?? '—'} (${p.influencers.slug ?? '—'})`
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {p.published ? '✅' : '❌'}
+                  </td>
+                  <td className="px-4 py-3">
+                    {new Date(p.created_at).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </main>
   );
 }
