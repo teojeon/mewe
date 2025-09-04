@@ -22,11 +22,11 @@ export default function NewPostPage() {
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabasePublic
+      const { data } = await supabasePublic
         .from("influencers")
         .select("id,name,slug")
         .order("created_at", { ascending: false });
-      if (!error && data) {
+      if (data) {
         setInfluencers(data as Influencer[]);
         if (data.length && !influencerId) setInfluencerId(data[0].id);
       }
@@ -34,10 +34,10 @@ export default function NewPostPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const updateProduct = (idx: number, key: keyof Product, val: string) =>
-    setProducts((prev) => prev.map((p, i) => (i === idx ? { ...p, [key]: val } : p)));
+  const updateProduct = (i: number, k: keyof Product, v: string) =>
+    setProducts((prev) => prev.map((p, idx) => (idx === i ? { ...p, [k]: v } : p)));
   const addProduct = () => setProducts((prev) => [...prev, { brand: "", name: "", link: "" }]);
-  const removeProduct = (idx: number) => setProducts((prev) => prev.filter((_, i) => i !== idx));
+  const removeProduct = (i: number) => setProducts((prev) => prev.filter((_, idx) => idx !== i));
 
   async function uploadCover(file: File, parentId: string) {
     const today = new Date().toISOString().slice(0, 10);
@@ -49,14 +49,12 @@ export default function NewPostPage() {
     );
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || "커버 이미지 업로드 실패");
-    // 🔒 Private: DB에는 path 저장
-    return j.path as string;
+    return j.path as string; // 5-C: path 반환
   }
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg(null);
-
     if (!influencerId) return setMsg("인플루언서를 선택하세요.");
     if (!title.trim()) return setMsg("제목을 입력하세요.");
 
@@ -76,16 +74,21 @@ export default function NewPostPage() {
         }))
         .filter((p) => p.brand || p.name || p.link);
 
-      const { error } = await supabasePublic.from("posts").insert({
-        influencer_id: influencerId,
-        title: title.trim(),
-        cover_image_url: coverPathToSave, // ← path 저장
-        body: body.trim() || null,
-        meta: cleanProducts.length ? { products: cleanProducts } : null,
-        published: true,
+      // ✅ RLS 우회: 서버 라우트로 저장
+      const res = await fetch("/api/admin/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          influencer_id: influencerId,
+          title: title.trim(),
+          cover_path: coverPathToSave,
+          body: body.trim() || null,
+          products: cleanProducts,
+          published: true,
+        }),
       });
-
-      if (error) throw error;
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "서버 저장 실패");
 
       setMsg("게시글을 생성했습니다.");
       setTitle(""); setCoverFile(null); setBody("");
@@ -128,13 +131,6 @@ export default function NewPostPage() {
         <label className={styles.label}>
           <span>커버 이미지</span>
           <input type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] || null)} className={styles.input} />
-          {coverFile && (
-            <div style={{ marginTop: 8 }}>
-              <img src={URL.createObjectURL(coverFile)} alt="cover preview" style={{ width: 160, height: 160, objectFit: "cover", borderRadius: 12 }} />
-              <div className={styles.help} style={{ marginTop: 6 }}>{coverFile.name}</div>
-            </div>
-          )}
-          <small className={styles.help}>정사각형 권장(jpg/png/webp)</small>
         </label>
 
         <label className={styles.label}>

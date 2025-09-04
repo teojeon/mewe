@@ -3,7 +3,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { supabasePublic } from "@/lib/supabase-client";
 import { compressImage } from "@/lib/image";
 import styles from "@/styles/admin.module.css";
 
@@ -24,7 +23,7 @@ export default function NewInfluencerPage() {
     setLinks((prev) => prev.map((r, i) => (i === idx ? { ...r, [key]: val } : r)));
 
   async function uploadAvatar(file: File, slugValue: string) {
-    const today = new Date().toISOString().slice(0, 10); // yyyy-mm-dd
+    const today = new Date().toISOString().slice(0, 10);
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(
@@ -33,7 +32,7 @@ export default function NewInfluencerPage() {
     );
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || "아바타 업로드 실패");
-    // 🔒 Private: DB에는 URL이 아닌 storage 경로(path) 저장
+    // Private 버킷: DB에는 path 저장
     return j.path as string;
   }
 
@@ -51,33 +50,31 @@ export default function NewInfluencerPage() {
 
     setBusy(true);
     try {
+      // 1) 이미지 압축 → 업로드
       let avatarPathToSave: string | null = null;
       if (avatarFile) {
         const compressed = await compressImage(avatarFile, { maxSize: 1600, quality: 0.85 });
         avatarPathToSave = await uploadAvatar(compressed, s);
       }
 
+      // 2) 서버 라우트에 INSERT (Service Role)
       const cleanLinks = links
         .map((l) => ({ url: l.url.trim(), label: l.label?.trim() || undefined }))
         .filter((l) => l.url);
 
-      // 업로드까지 끝난 뒤
-        const res = await fetch("/api/admin/influencers", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    name: n,
-    slug: s,
-    bio: b || null,
-    avatar_path: avatarPathToSave, // Storage path (5-C)
-    links: cleanLinks,             // [{url,label?}, ...] 또는 []
-  }),
-});
-const j = await res.json();
-if (!res.ok) throw new Error(j.error || "서버 저장 실패");
-
-
-      if (error) throw error;
+      const res = await fetch("/api/admin/influencers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: n,
+          slug: s,
+          bio: b || null,
+          avatar_path: avatarPathToSave,
+          links: cleanLinks,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "서버 저장 실패");
 
       setMsg("인플루언서를 생성했습니다.");
       setName(""); setSlug(""); setBio("");
@@ -94,7 +91,9 @@ if (!res.ok) throw new Error(j.error || "서버 저장 실패");
       <header className={styles.header}>
         <h1 className={styles.title}>신규 인플루언서</h1>
         <div className={styles.actions}>
-          <Link className={`${styles.btn} ${styles.btnGhost}`} href="/admin">← 돌아가기</Link>
+          <Link className={`${styles.btn} ${styles.btnGhost}`} href="/admin">
+            ← 돌아가기
+          </Link>
         </div>
       </header>
 
@@ -114,10 +113,19 @@ if (!res.ok) throw new Error(j.error || "서버 저장 실패");
 
         <label className={styles.label}>
           <span>아바타 이미지</span>
-          <input type="file" accept="image/*" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} className={styles.input} />
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
+            className={styles.input}
+          />
           {avatarFile && (
             <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-              <img src={URL.createObjectURL(avatarFile)} alt="avatar preview" style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover" }} />
+              <img
+                src={URL.createObjectURL(avatarFile)}
+                alt="avatar preview"
+                style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover" }}
+              />
               <small className={styles.help}>{avatarFile.name}</small>
             </div>
           )}
@@ -126,7 +134,13 @@ if (!res.ok) throw new Error(j.error || "서버 저장 실패");
 
         <label className={styles.label}>
           <span>소개 (bio)</span>
-          <textarea className={styles.textarea} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="간단한 소개를 입력하세요" rows={4} />
+          <textarea
+            className={styles.textarea}
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="간단한 소개를 입력하세요"
+            rows={4}
+          />
         </label>
 
         <div className={styles.fieldset}>
@@ -134,13 +148,36 @@ if (!res.ok) throw new Error(j.error || "서버 저장 실패");
           <div className={styles.linksStack}>
             {links.map((row, i) => (
               <div key={i} className={styles.linkRow}>
-                <input className={styles.input} placeholder="https://instagram.com/..." value={row.url} onChange={(e) => updateLink(i, "url", e.target.value)} />
-                <input className={styles.input} placeholder="라벨(선택): Instagram" value={row.label ?? ""} onChange={(e) => updateLink(i, "label", e.target.value)} />
-                <button type="button" className={`${styles.btn} ${styles.btnGhost}`} onClick={() => removeLink(i)}>삭제</button>
+                <input
+                  className={styles.input}
+                  placeholder="https://instagram.com/..."
+                  value={row.url}
+                  onChange={(e) => updateLink(i, "url", e.target.value)}
+                />
+                <input
+                  className={styles.input}
+                  placeholder="라벨(선택): Instagram"
+                  value={row.label ?? ""}
+                  onChange={(e) => updateLink(i, "label", e.target.value)}
+                />
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.btnGhost}`}
+                  onClick={() => removeLink(i)}
+                >
+                  삭제
+                </button>
               </div>
             ))}
           </div>
-          <button type="button" className={`${styles.btn} ${styles.btnSecondary}`} onClick={addLink}>+ 링크 추가</button>
+
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnSecondary}`}
+            onClick={addLink}
+          >
+            + 링크 추가
+          </button>
         </div>
 
         <div className={styles.footer}>
