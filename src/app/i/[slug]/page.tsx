@@ -7,91 +7,120 @@ import styles from "@/styles/feed.module.css";
 type Influencer = {
   id: string;
   name: string | null;
+  slug?: string | null;
+  avatar_url: string | null; // ✅ 아바타 추가
   bio: string | null;
+  links: any[] | null;
 };
 
 type PostRow = {
   id: string;
   title: string | null;
   cover_image_url: string | null;
-  created_at?: string | null;
 };
 
 async function getInfluencerBySlug(slug: string): Promise<Influencer | null> {
   const { data, error } = await supabasePublic
     .from("influencers")
-    .select("id,name,bio")
+    .select("id,name,slug,avatar_url,bio,links") // ✅ avatar_url 포함
     .eq("slug", slug)
-    .single<Influencer>();
+    .maybeSingle();
 
-  if (error || !data) return null;
-  return data;
+  if (error) {
+    console.error(error);
+    return null;
+  }
+  return (data as Influencer) ?? null;
 }
 
-async function listByInfluencerId(influencerId: string): Promise<PostRow[]> {
+async function getPostsByInfluencerId(influencer_id: string): Promise<PostRow[]> {
   const { data, error } = await supabasePublic
     .from("posts")
-    .select("id,title,cover_image_url,created_at,published,influencer_id")
-    .eq("published", true)
-    .eq("influencer_id", influencerId)
+    .select("id,title,cover_image_url")
+    .eq("influencer_id", influencer_id)
     .order("created_at", { ascending: false });
 
-  if (error || !data) return [];
-  return data as PostRow[];
+  if (error) {
+    console.error(error);
+    return [];
+  }
+  return (data as PostRow[]) ?? [];
 }
 
 export default async function Page({ params }: { params: { slug: string } }) {
   const influencer = await getInfluencerBySlug(params.slug);
-  const items = influencer ? await listByInfluencerId(influencer.id) : [];
+  const posts = influencer ? await getPostsByInfluencerId(influencer.id) : [];
+
+  const name = influencer?.name ?? params.slug;
+  const handle = influencer?.slug ? `@${influencer.slug}` : `@${params.slug}`;
 
   return (
-    <div>
-      {/* 1) 상단 100px: name + bio */}
-      <section
-        style={{
-          height: 100,
-          padding: "12px",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          gap: 6,
-          borderBottom: "1px solid rgba(0,0,0,0.06)",
-          background: "#fff",
-        }}
-      >
-        <h2
-          style={{
-            margin: 0,
-            fontSize: 18,
-            lineHeight: 1.2,
-            fontWeight: 700,
-          }}
-        >
-          {influencer?.name ?? params.slug}
-        </h2>
-        {influencer?.bio ? (
-          <p
-            style={{
-              margin: 0,
-              fontSize: 13,
-              color: "#555",
-              lineHeight: 1.4,
-              whiteSpace: "pre-line",
-            }}
-          >
-            {influencer.bio}
-          </p>
-        ) : (
-          <p style={{ margin: 0, fontSize: 13, color: "#888" }}>소개가 없습니다.</p>
-        )}
+    <div className={styles.page}>
+      {/* 상단 프로필 카드: 왼쪽 아바타(원형) + 오른쪽 텍스트(Name/slug 세로) */}
+      <section className={styles.profileCard}>
+        <div className={styles.avatarWrap}>
+          {influencer?.avatar_url ? (
+            <Image
+              src={influencer.avatar_url}
+              alt={`${name} avatar`}
+              fill
+              sizes="56px"
+              className={styles.avatarImg}
+            />
+          ) : (
+            <div className={styles.avatarFallback}>
+              {String(name ?? "U").slice(0, 1).toUpperCase()}
+            </div>
+          )}
+        </div>
+
+        <div className={styles.profileText}>
+          <div className={styles.profileTitle}>{name}</div>
+          <div className={styles.profileHandle}>{handle}</div>
+        </div>
       </section>
 
-      {/* 2) 그 아래 150px 빈 공간 */}
-      <div style={{ height: 150 }} />
+      {/* 소개 링크 카드 (버튼/링크) */}
+      <section className={styles.linksCard}>
+        <div className={styles.linksRow}>
+          {(influencer?.links ?? []).length > 0 ? (
+            <ul className={styles.linkBtns}>
+              {(influencer?.links as any[]).map((lnk, i) => {
+                const url = typeof lnk === "string" ? lnk : lnk?.url;
+                const label =
+                  typeof lnk === "object" && lnk?.label ? lnk.label : null;
+                if (!url) return null;
 
-      {/* 3) 포스트 그리드: 3열, 1px 간격(모서리 각짐) */}
-      <section className={styles.grid3}>
-        {items
+                let text = label ?? "";
+                try {
+                  if (!text) text = new URL(url).hostname.replace(/^www\./, "");
+                } catch {
+                  text = label || "link";
+                }
+
+                return (
+                  <li key={i}>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.linkBtn}
+                    >
+                      {text}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className={styles.linksEmpty}>소개 링크가 없습니다.</div>
+          )}
+        </div>
+      </section>
+
+      {/* 3열 그리드 (화면 가득) */}
+      <section className={styles.grid}>
+        {posts
           .filter((it) => !!it.cover_image_url)
           .map((item) => (
             <article

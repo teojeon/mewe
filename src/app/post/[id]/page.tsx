@@ -114,10 +114,11 @@ export default async function PostDetail({
   {post.wearItems.length > 0 ? (
     <ul className={styles.wearList}>
       {post.wearItems.map((it, idx) => {
-        const text = [it.brand, it.name].filter(Boolean).join(" · ");
+        const text = [it.brand, it.name].filter(Boolean).join(" | ");
         if (!text) return null;
         return (
           <li key={idx} className={styles.wearItem}>
+            <span className={styles.wearNum}>{idx + 1}</span>
             <span className={styles.wearText}>{text}</span>
             {it.link && (
               <a

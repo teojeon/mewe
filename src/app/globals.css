@@ -12,7 +12,7 @@
   --app-ideal: 92vw;      /* 화면 폭의 92% */
   --app-max: 440px;       /* 데스크톱/대형 폰 상한 */
   --app-bg: #ffffff;
-  --page-bg: #f6f7f9;
+  --page-bg: #ffffff;
   --border: rgba(0,0,0,0.08);
   --shadow: 0 10px 30px rgba(0,0,0,0.08);
   --safe-top: env(safe-area-inset-top);
@@ -26,7 +26,9 @@ html, body {
   margin: 0; padding: 0;
   background: var(--page-bg);
   color: #111;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Apple SD Gothic Neo, "Noto Sans KR", sans-serif;
+  /* ✅ Pretendard(변수 폰트) → 시스템 폴백 */
+  font-family: var(--font-pretendard), system-ui, -apple-system, Segoe UI, Roboto,
+               Apple SD Gothic Neo, "Noto Sans KR", "Malgun Gothic", Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -1,19 +1,28 @@
-// app/layout.tsx
-import type { Metadata, Viewport } from "next";
+// src/app/layout.tsx
+import type { Metadata } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
-import Header from "../components/Header";
-import TabBar from "../components/TabBar";
+
+import HeaderGate from "@/components/HeaderGate";
+import Header from "@/components/Header";
 
 export const metadata: Metadata = {
-  title: "mewe",
-  description: "Mobile-first web app",
+  title: "CREATOR.SHOP",
+  description: "Influencer catalog",
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover", // iOS safe-area 대응
-};
+const pretendard = localFont({
+  src: [
+    {
+      // ⬇️ 파일 시스템 상대 경로 (layout.tsx 기준)
+      path: "../../public/fonts/pretendard/PretendardVariable.woff2",
+      weight: "45 920",
+      style: "normal",
+    },
+  ],
+  variable: "--font-pretendard",
+  display: "swap",
+});
 
 export default function RootLayout({
   children,
@@ -22,14 +31,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body>
-        <div id="app-root">
+      <body className={pretendard.variable}>
+        <HeaderGate>
           <Header />
-          <main role="main" className="app-main">
-            {children}
-          </main>
-          <TabBar />
-        </div>
+        </HeaderGate>
+        {children}
       </body>
     </html>
   );

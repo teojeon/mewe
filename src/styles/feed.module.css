@@ -1,36 +1,158 @@
 /* src/styles/feed.module.css */
 
-/* 3열 그리드 + 1px 간격 */
-.grid3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1px;         /* 요구사항: 1px */
-  padding: 0;       /* 여백 없음 (카드가 꽉 차보이도록) */
+/* 페이지 전체: 좌우 여백 제거(그리드 가득) */
+.page {
+  padding: 0;
+  background: #ffffff;
+  min-height: 100dvh;
+  margin: 0;
 }
 
-/* 카드 컨테이너: 모서리 각지게(둥글지 않게), 테두리/그림자 없음 */
+.profileCard {
+  margin: 16px;
+  padding: 24px 24px 0 24px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: none; /* 상단 카드 그림자 제거(요청 반영) */
+  display: flex;            /* ✅ 가로 정렬 */
+  align-items: center;
+  gap: 20px;                /* 아바타 ↔ 텍스트 간격 */
+}
+
+/* 아바타(원형) */
+.avatarWrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 9999px;
+  overflow: hidden;
+  background: #e9ecf1;
+  flex-shrink: 0;
+}
+.avatarImg {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+.avatarFallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #666;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+/* 텍스트 묶음(Name/slug 세로 정렬) */
+.profileText {
+  display: grid;
+  gap: 2px;                /* ✅ Name ↔ slug 간격 */
+}
+
+.profileTitle {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.profileHandle {
+  font-size: 14px;
+  color: #7b7b7b;
+  margin-top: 0;
+}
+
+/* 새로 추가: 링크 버튼 전용 카드 */
+.linksCard {
+  margin: 0 16px 16px;   /* 위 카드와 간격 */
+  padding: 10px 24px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.04),
+    0 8px 24px rgba(0,0,0,0.06);
+}
+
+/* 소개 링크 섹션 */
+.linksRow {
+  margin-top: 10px;   /* 카드 내부 위쪽 여백 */
+}
+
+/* 버튼 컨테이너: 세로 1열 */
+.linkBtns {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+/* 버튼 자체는 기존 스타일 유지 (가로폭은 내용만큼) */
+.linkBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: #fff;
+  color: #000;
+  font-size: 15.4px;
+  line-height: 1;
+  text-decoration: none;
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.05),
+    0 6px 16px rgba(0,0,0,0.06);
+  transition: transform 80ms ease, background 150ms ease, border-color 150ms ease;
+}
+.linkBtn:hover { background: #f9f9f9; border-color: rgba(0,0,0,0.14); }
+.linkBtn:active { transform: translateY(1px); }
+
+.linksEmpty { font-size: 13px; color: #888; }
+
+/* === 3열 그리드 (항상 3열 고정, 화면 가득) === */
+.grid,
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)); /* ✅ 항상 3열 */
+  gap: 1px;
+  padding: 0;
+  margin: 0;
+  background: #ffffff; /* 갭 사이 배경 */
+}
+
+/* 카드/이미지 */
 .card {
   position: relative;
-  border-radius: 0; /* 요구사항: 각지게 */
-  overflow: hidden; /* 이미지가 컨테이너 밖으로 나가지 않도록 */
-  background: #000; /* 갭이 1px일 때 검은색 라인이 미묘하게 보이도록(원하면 #fff로 변경) */
+  border-radius: 0;
+  overflow: hidden;
+  background: #000; /* 1px 갭이 검은 라인처럼 보이게 */
   border: none;
   box-shadow: none;
 }
 
-/* 정사각형 썸네일 영역 */
 .thumb {
   position: relative;
   width: 100%;
-  aspect-ratio: 1 / 1;
-  background: #e9ecf1; /* 로딩 중 배경 */
+  aspect-ratio: 1 / 1; /* 정사각형 */
+  background: #e9ecf1;
 }
 
-/* next/image(fill)용: 컨테이너 꽉 채우기 */
 .imgFill {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* === (중요) 반응형에서도 3열 유지 === */
+@media (max-width: 900px) {
+  .grid, .grid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .grid, .grid3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

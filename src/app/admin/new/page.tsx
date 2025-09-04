@@ -19,6 +19,7 @@ export default function AdminNew() {
     (async () => {
       try {
         setInfLoading(true);
+        setInfError(null);
         const { data, error } = await supabasePublic
           .from("influencers")
           .select("id,slug,name")
@@ -37,6 +38,20 @@ export default function AdminNew() {
   const [infSlug, setInfSlug] = useState("");
   const [infName, setInfName] = useState("");
   const [infBio, setInfBio] = useState("");
+
+  // ✅ (1) state/핸들러 추가: 소개 링크 관리
+  const [infLinks, setInfLinks] = useState<string[]>([""]);
+
+  function addInfLink() {
+    setInfLinks((prev) => [...prev, ""]);
+  }
+  function removeInfLink(idx: number) {
+    setInfLinks((prev) => prev.filter((_, i) => i !== idx));
+  }
+  function updateInfLink(idx: number, val: string) {
+    setInfLinks((prev) => prev.map((v, i) => (i === idx ? val : v)));
+  }
+
   const [infSubmitting, setInfSubmitting] = useState(false);
   const [infMsg, setInfMsg] = useState<string | null>(null);
 
@@ -49,21 +64,38 @@ export default function AdminNew() {
     }
     try {
       setInfSubmitting(true);
+
+      // ✅ (2) DB insert에 links 포함
       const { data, error } = await supabasePublic
         .from("influencers")
-        .insert([{ slug: infSlug.trim(), name: infName.trim(), bio: infBio || null }])
+        .insert([
+          {
+            slug: infSlug.trim(),
+            name: infName.trim(),
+            bio: infBio || null,
+            links: infLinks
+              .filter((x) => x.trim())
+              .map((x) => ({ url: x.trim() })), // [{url}] 형태
+          },
+        ])
         .select("id")
         .single();
+
       if (error) throw error;
       setInfMsg(`인플루언서 생성 성공! id=${data?.id ?? "?"}`);
 
-      const { data: refreshed } = await supabasePublic
+      // 생성 후 목록 리프레시
+      const { data: refreshed, error: err2 } = await supabasePublic
         .from("influencers")
         .select("id,slug,name")
         .order("created_at", { ascending: false });
-      setInfluencers((refreshed ?? []) as Influencer[]);
+      if (!err2) setInfluencers((refreshed ?? []) as Influencer[]);
 
-      setInfSlug(""); setInfName(""); setInfBio("");
+      // 폼 초기화
+      setInfSlug("");
+      setInfName("");
+      setInfBio("");
+      setInfLinks([""]);
     } catch (err: any) {
       setInfMsg(`실패: ${err?.message ?? String(err)}`);
     } finally {
@@ -91,27 +123,25 @@ export default function AdminNew() {
   function removeRow(index: number) {
     setProducts((prev) => prev.filter((_, i) => i !== index));
   }
-  function updateRow(index: number, key: keyof ProductInput, value: string) {
-    setProducts((prev) => prev.map((p, i) => (i === index ? { ...p, [key]: value } : p)));
+  function updateRow(index: number, key: keyof ProductInput, val: string) {
+    setProducts((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, [key]: val } : p))
+    );
   }
-
-  const cleanedProducts = useMemo(
-    () =>
-      products
-        .map(({ brand, name, link }) => ({
-          brand: brand.trim(),
-          name: name.trim(),
-          link: link.trim(),
-        }))
-        .filter((p) => p.brand || p.name || p.link),
-    [products]
-  );
 
   async function handleCreatePost(e: React.FormEvent) {
     e.preventDefault();
     setPostMsg(null);
     if (!postInfId) return setPostMsg("인플루언서를 선택해 주세요.");
     if (!postTitle.trim()) return setPostMsg("제목은 필수입니다.");
+
+    const cleanedProducts = products
+      .map((p) => ({
+        brand: p.brand?.trim(),
+        name: p.name?.trim(),
+        link: p.link?.trim(),
+      }))
+      .filter((p) => p.brand || p.name || p.link);
 
     const meta = { products: cleanedProducts };
 
@@ -131,13 +161,14 @@ export default function AdminNew() {
         ])
         .select("id")
         .single();
+
       if (error) throw error;
 
       setCreatedPostId(data?.id ?? null);
-      setPostMsg(`포스트 생성 성공! id=${data?.id ?? "?"}`);
-
-      setPostTitle(""); setPostCover(""); setPostBody("");
-      setPostPublished(true);
+      setPostMsg("게시글 생성 완료!");
+      setPostTitle("");
+      setPostCover("");
+      setPostBody("");
       setProducts([{ brand: "", name: "", link: "" }]);
     } catch (err: any) {
       setPostMsg(`실패: ${err?.message ?? String(err)}`);
@@ -146,12 +177,26 @@ export default function AdminNew() {
     }
   }
 
+  const cleanedProductsPreview = useMemo(
+    () =>
+      products
+        .map((p) => ({
+          brand: p.brand?.trim(),
+          name: p.name?.trim(),
+          link: p.link?.trim(),
+        }))
+        .filter((p) => p.brand || p.name || p.link),
+    [products]
+  );
+
   return (
     <div className={styles.wrap}>
       <div className={styles.header}>
         <h1 className={styles.title}>새 글 / 인플루언서</h1>
         <div className={styles.toolbar}>
-          <Link href="/admin" className={styles.btnGhost}>← Admin</Link>
+          <Link href="/admin" className={styles.btnGhost}>
+            ← Admin
+          </Link>
         </div>
       </div>
 
@@ -163,22 +208,22 @@ export default function AdminNew() {
             <label className={styles.label}>slug*</label>
             <input
               className={styles.input}
-              placeholder="예: teo"
+              placeholder="meetquack"
               value={infSlug}
               onChange={(e) => setInfSlug(e.target.value)}
-              required
             />
           </div>
+
           <div className={styles.row}>
             <label className={styles.label}>name*</label>
             <input
               className={styles.input}
-              placeholder="예: Teo"
+              placeholder="Meetquack"
               value={infName}
               onChange={(e) => setInfName(e.target.value)}
-              required
             />
           </div>
+
           <div className={styles.row}>
             <label className={styles.label}>bio</label>
             <textarea
@@ -188,32 +233,65 @@ export default function AdminNew() {
               onChange={(e) => setInfBio(e.target.value)}
             />
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className={styles.btn} type="submit" disabled={infSubmitting}>
+
+          {/* ✅ (3) bio 아래 링크 입력 UI 블록 */}
+          <div className={styles.row}>
+            <label className={styles.label}>소개 링크</label>
+            <div className={styles.products}>
+              {infLinks.map((v, i) => (
+                <div key={i} className={`${styles.prodRow} ${styles.prodInputs}`}>
+                  <input
+                    className={styles.input}
+                    placeholder="https://…"
+                    value={v}
+                    onChange={(e) => updateInfLink(i, e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className={styles.miniBtn}
+                    onClick={() => removeInfLink(i)}
+                  >
+                    삭제
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className={styles.btnGhost}
+                onClick={addInfLink}
+              >
+                + 링크 추가
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.actions}>
+            <button className={styles.btnPrimary} disabled={infSubmitting}>
               {infSubmitting ? "생성 중…" : "인플루언서 생성"}
             </button>
-            {infMsg && <span className={styles.help}>{infMsg}</span>}
+            {infMsg && <div className={styles.help}>{infMsg}</div>}
+            {infError && <div className={styles.help} style={{ color: "tomato" }}>{infError}</div>}
           </div>
         </form>
       </section>
 
-      {/* 포스트 생성 */}
+      {/* 게시글 생성 */}
       <section className={styles.section}>
-        <h2 style={{ margin: 0, fontSize: 16 }}>포스트 생성</h2>
+        <h2 style={{ margin: 0, fontSize: 16 }}>게시글 생성</h2>
         <form className={styles.form} onSubmit={handleCreatePost}>
           <div className={styles.row}>
             <label className={styles.label}>influencer*</label>
             <select
-              className={styles.select}
+              className={styles.input}
               value={postInfId}
               onChange={(e) => setPostInfId(e.target.value)}
-              disabled={infLoading || !!infError}
-              required
             >
-              <option value="">{infLoading ? "불러오는 중…" : "선택하세요"}</option>
+              <option value="">-- 선택 --</option>
               {influencers.map((inf) => (
                 <option key={inf.id} value={inf.id}>
-                  {inf.slug ?? "(no-slug)"} — {inf.name ?? "(no-name)"}
+                  {inf.name ?? inf.slug ?? inf.id}
                 </option>
               ))}
             </select>
@@ -226,7 +304,6 @@ export default function AdminNew() {
               placeholder="제목"
               value={postTitle}
               onChange={(e) => setPostTitle(e.target.value)}
-              required
             />
           </div>
 
@@ -241,7 +318,7 @@ export default function AdminNew() {
           </div>
 
           <div className={styles.row}>
-            <label className={styles.label}>body</label>
+            <label className={styles.label}>본문</label>
             <textarea
               className={styles.textarea}
               placeholder="본문(선택)"
@@ -278,17 +355,16 @@ export default function AdminNew() {
                     type="button"
                     className={styles.miniBtn}
                     onClick={() => removeRow(i)}
-                    aria-label="행 삭제"
                   >
                     삭제
                   </button>
                 </div>
               ))}
-              <div>
-                <button type="button" className={styles.miniBtn} onClick={addRow}>
-                  + 행 추가
-                </button>
-              </div>
+            </div>
+            <div className={styles.actions}>
+              <button type="button" className={styles.btnGhost} onClick={addRow}>
+                + 행 추가
+              </button>
             </div>
           </div>
 
@@ -301,20 +377,15 @@ export default function AdminNew() {
             />
           </div>
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button className={styles.btn} type="submit" disabled={postSubmitting}>
-              {postSubmitting ? "생성 중…" : "포스트 생성"}
+          <div className={styles.actions}>
+            <button className={styles.btnPrimary} disabled={postSubmitting}>
+              {postSubmitting ? "생성 중…" : "게시글 생성"}
             </button>
-            {postMsg && <span className={styles.help}>{postMsg}</span>}
+            {postMsg && <div className={styles.help}>{postMsg}</div>}
             {createdPostId && (
-              <>
-                <Link className={styles.linkBtn} href={`/post/${createdPostId}`}>
-                  생성된 포스트 보기
-                </Link>
-                <Link className={styles.linkBtn} href="/admin">
-                  Admin으로 가기
-                </Link>
-              </>
+              <div className={styles.help}>
+                새 글: <Link href={`/post/${createdPostId}`}>/post/{createdPostId}</Link>
+              </div>
             )}
           </div>
 
@@ -322,7 +393,7 @@ export default function AdminNew() {
           <div className={styles.help}>
             meta 미리보기:&nbsp;
             <code style={{ fontSize: 12 }}>
-              {JSON.stringify({ products: cleanedProducts })}
+              {JSON.stringify({ products: cleanedProductsPreview })}
             </code>
           </div>
         </form>
