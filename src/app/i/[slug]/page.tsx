@@ -1,122 +1,169 @@
 // src/app/i/[slug]/page.tsx
-import Image from "next/image";
-import Link from "next/link";
-import { supabasePublic } from "@/lib/supabase-client";
-import styles from "@/styles/feed.module.css";
+import { cookies } from 'next/headers';
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import { notFound } from 'next/navigation';
 
-type Influencer = {
-  id: string;
-  name: string | null;
-  slug?: string | null;
-  avatar_url: string | null; // 이제 storage 'path'가 들어옴
-  bio: string | null;
-  links: any[] | null;
-};
-type PostRow = { id: string; title: string | null; cover_image_url: string | null };
+type LinkItem = { text: string; url: string };
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+export default async function InfluencerPage({
+  params,
+}: {
+  params: { slug: string };
+}) {
+  const supabase = createServerComponentClient({ cookies });
 
-async function signUrl(bucket: string, path: string, expiresSec = 3600) {
-  const res = await fetch(
-    `${BASE_URL}/api/sign?bucket=${bucket}&path=${encodeURIComponent(path)}&expires=${expiresSec}`,
-    { cache: "no-store" }
-  );
-  const j = await res.json();
-  if (!res.ok) throw new Error(j.error || "sign failed");
-  return j.url as string;
-}
+  // 1) 인플루언서 본문
+  const { data: inf, error: infErr } = await supabase
+    .from('influencers')
+    .select('id, name, slug, avatar_url, links')
+    .eq('slug', params.slug)
+    .single();
 
-async function getInfluencerBySlug(slug: string): Promise<Influencer | null> {
-  const { data, error } = await supabasePublic
-    .from("influencers")
-    .select("id,name,slug,avatar_url,bio,links")
-    .eq("slug", slug)
-    .maybeSingle();
-  if (error) { console.error(error); return null; }
-  return (data as Influencer) ?? null;
-}
+  // 슬러그 없음 → 404
+  if (!inf && !infErr) notFound();
+  // no row (PostgREST가 "no rows"일 때 error가 올 수도 있음)
+  if (infErr && (infErr as any).code === 'PGRST116') notFound();
+  // 그 외 에러 → 에러 메시지 표시
+  if (infErr && (infErr as any).code !== 'PGRST116') {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>Influencer</h1>
+        <p style={{ color: 'crimson' }}>
+          불러오기 실패: {String(infErr.message || infErr)}
+        </p>
+      </main>
+    );
+  }
 
-async function getPostsByInfluencerId(influencer_id: string): Promise<PostRow[]> {
-  const { data, error } = await supabasePublic
-    .from("posts")
-    .select("id,title,cover_image_url")
-    .eq("influencer_id", influencer_id)
-    .order("created_at", { ascending: false });
-  if (error) { console.error(error); return []; }
-  return (data as PostRow[]) ?? [];
-}
+  const infId = String(inf!.id);
 
-export default async function Page({ params }: { params: { slug: string } }) {
-  const influencer = await getInfluencerBySlug(params.slug);
-  const posts = influencer ? await getPostsByInfluencerId(influencer.id) : [];
+  // 2) 이 인플루언서가 연결된 포스트들 + 각 포스트의 제품 목록
+  const { data: posts, error: postsErr } = await supabase
+    .from('posts')
+    .select(
+      `
+      id,
+      title,
+      created_at,
+      published,
+      posts_influencers!inner(influencer_id),
+      posts_products (
+        products ( name, slug, brand, url )
+      )
+    `.trim(),
+    )
+    .eq('posts_influencers.influencer_id', infId)
+    .order('created_at', { ascending: false });
 
-  const name = influencer?.name ?? params.slug;
-  const handle = influencer?.slug ? `@${influencer.slug}` : `@${params.slug}`;
-
-  const avatarSrc = influencer?.avatar_url
-    ? await signUrl("avatars", influencer.avatar_url, 3600)
-    : null;
+  const rows = (posts as any[] | null) ?? [];
 
   return (
-    <div className={styles.page}>
-      {/* 상단 프로필 카드: 아바타(원형) + 우측 Name/slug */}
-      <section className={styles.profileCard}>
-        <div className={styles.avatarWrap}>
-          {avatarSrc ? (
-            <Image src={avatarSrc} alt={`${name} avatar`} fill sizes="56px" className={styles.avatarImg} />
-          ) : (
-            <div className={styles.avatarFallback}>{String(name ?? "U").slice(0,1).toUpperCase()}</div>
-          )}
+    <main style={{ padding: 24, maxWidth: 880, margin: '0 auto' }}>
+      <header style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 12 }}>
+        {inf?.avatar_url ? (
+          <img
+            src={inf.avatar_url}
+            alt={`${inf?.name ?? inf?.slug} avatar`}
+            width={72}
+            height={72}
+            style={{ borderRadius: 12, objectFit: 'cover' }}
+          />
+        ) : null}
+        <div>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>
+            {inf?.name ?? inf?.slug}
+          </h1>
+          <div style={{ color: '#666', fontSize: 13 }}>@{inf?.slug}</div>
         </div>
-        <div className={styles.profileText}>
-          <div className={styles.profileTitle}>{name}</div>
-          <div className={styles.profileHandle}>{handle}</div>
-        </div>
-      </section>
+      </header>
 
-      {/* 소개 링크 카드 */}
-      <section className={styles.linksCard}>
-        <div className={styles.linksRow}>
-          {(influencer?.links ?? []).length > 0 ? (
-            <ul className={styles.linkBtns}>
-              {(influencer?.links as any[]).map((lnk, i) => {
-                const url = typeof lnk === "string" ? lnk : lnk?.url;
-                const label = typeof lnk === "object" && lnk?.label ? lnk.label : null;
-                if (!url) return null;
-                let text = label ?? "";
-                try { if (!text) text = new URL(url).hostname.replace(/^www\./, ""); } catch { text = label || "link"; }
-                return (
-                  <li key={i}>
-                    <a href={url} target="_blank" rel="noopener noreferrer" className={styles.linkBtn}>{text}</a>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <div className={styles.linksEmpty}>소개 링크가 없습니다.</div>
-          )}
-        </div>
-      </section>
+      {/* 링크 목록 */}
+      {Array.isArray(inf?.links) && inf.links.length > 0 && (
+        <section style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>Links</div>
+          <ul style={{ paddingLeft: 18, margin: 0 }}>
+            {(inf.links as any[]).map((l, i) => {
+              const text =
+                typeof l?.text === 'string'
+                  ? l.text
+                  : typeof l?.url === 'string'
+                  ? l.url
+                  : '';
+              const url = typeof l?.url === 'string' ? l.url : '';
+              if (!url) return null;
+              return (
+                <li key={i}>
+                  <a href={url} target="_blank" rel="noreferrer">
+                    {text || url}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
-      {/* 3열 그리드 */}
-      <section className={styles.grid}>
-        {posts.filter((it) => !!it.cover_image_url).map((item) => (
-          <article key={item.id} className={styles.card} aria-label={item.title ?? ""}>
-            <Link href={`/post/${item.id}`} title={item.title ?? ""}>
-              <div className={styles.thumb}>
-                {/* 포스트 커버는 post 페이지에서 서명하여 렌더 */}
-                <Image
-                  src="/placeholder.png"
-                  alt=""
-                  fill
-                  sizes="(max-width: 440px) 33vw, 146px"
-                  className={styles.imgFill}
-                />
-              </div>
-            </Link>
-          </article>
-        ))}
+      <section>
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6 }}>
+          Posts
+        </div>
+
+        {postsErr ? (
+          <div style={{ color: 'crimson' }}>
+            포스트 불러오기 실패: {String(postsErr.message || postsErr)}
+          </div>
+        ) : rows.length === 0 ? (
+          <div style={{ color: '#666' }}>연결된 포스트가 없습니다.</div>
+        ) : (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {rows.map((p: any) => {
+              const prods = Array.isArray(p?.posts_products)
+                ? p.posts_products
+                    .map((pp: any) => pp?.products ?? null)
+                    .filter(Boolean)
+                : [];
+              return (
+                <div
+                  key={String(p.id)}
+                  style={{
+                    border: '1px solid #eee',
+                    borderRadius: 12,
+                    padding: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                    }}
+                  >
+                    <strong>{p?.title ?? '제목 없음'}</strong>
+                    <span style={{ color: '#666', fontSize: 12 }}>
+                      {new Date(p?.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, marginTop: 6 }}>
+                    <b>Published:</b> {p?.published ? '✅' : '❌'}
+                  </div>
+                  <div style={{ fontSize: 13, marginTop: 6 }}>
+                    <b>Products:</b>{' '}
+                    {prods.length > 0
+                      ? prods
+                          .map(
+                            (pd: any) =>
+                              `${pd?.brand ? pd.brand + ' ' : ''}${pd?.name ?? '—'}` +
+                              (pd?.url ? ` (${pd.url})` : ''),
+                          )
+                          .join(', ')
+                      : '—'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
-    </div>
+    </main>
   );
 }
