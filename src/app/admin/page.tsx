@@ -5,12 +5,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import styles from '@/styles/admin.module.css';
 
+type LinkItem = { text: string; url: string };
+
 type InfluencerLite = {
   id: string;
   name: string | null;
   slug: string | null;
   avatar_url?: string | null;
-  links?: string[] | null;
+  links?: LinkItem[] | null;
 };
 
 type ProductLite = { id: string; name: string | null; slug: string | null };
@@ -37,7 +39,7 @@ export default function AdminPage() {
   // 인플루언서 폼
   const [infName, setInfName] = useState('');
   const [infSlug, setInfSlug] = useState('');
-  const [infLinks, setInfLinks] = useState<string[]>(['']); // 동적 링크 입력
+  const [infLinks, setInfLinks] = useState<LinkItem[]>([{ text: '', url: '' }]);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
@@ -59,13 +61,43 @@ export default function AdminPage() {
           .select('id, name, slug, avatar_url, links')
           .order('name', { ascending: true });
         if (error) throw error;
-        const list: InfluencerLite[] = (data ?? []).map((r: any) => ({
-          id: String(r.id),
-          name: r?.name ?? null,
-          slug: r?.slug ?? null,
-          avatar_url: r?.avatar_url ?? null,
-          links: Array.isArray(r?.links) ? r.links : r?.links ? [] : [],
-        }));
+
+        const list: InfluencerLite[] = (data ?? []).map((r: any) => {
+          // links 형태 보정:
+          // - [{text,url}] (권장) → 그대로
+          // - ["https://..."] (과거) → [{text:url,url}]
+          // - null/기타 → []
+          let links: LinkItem[] | null = null;
+          const raw = r?.links;
+          if (Array.isArray(raw)) {
+            if (raw.every((x) => typeof x === 'object' && x && 'url' in x)) {
+              links = raw.map((x: any) => ({
+                text:
+                  typeof x?.text === 'string'
+                    ? x.text
+                    : typeof x?.url === 'string'
+                    ? x.url
+                    : '',
+                url: typeof x?.url === 'string' ? x.url : '',
+              }));
+            } else if (raw.every((x) => typeof x === 'string')) {
+              links = raw.map((url: string) => ({ text: url, url }));
+            } else {
+              links = [];
+            }
+          } else {
+            links = [];
+          }
+
+          return {
+            id: String(r.id),
+            name: r?.name ?? null,
+            slug: r?.slug ?? null,
+            avatar_url: r?.avatar_url ?? null,
+            links,
+          };
+        });
+
         setInfluencers(list);
       }
 
@@ -184,12 +216,20 @@ export default function AdminPage() {
     setAvatarPreview(file ? URL.createObjectURL(file) : null);
   };
 
-  const addLinkRow = () => setInfLinks((prev) => [...prev, '']);
+  // 링크 행 조작
+  const addLinkRow = () =>
+    setInfLinks((prev) => [...prev, { text: '', url: '' }]);
+
   const removeLinkRow = (idx: number) =>
     setInfLinks((prev) => prev.filter((_, i) => i !== idx));
-  const changeLink = (idx: number, value: string) =>
-    setInfLinks((prev) => prev.map((v, i) => (i === idx ? value : v)));
 
+  const changeLinkText = (idx: number, value: string) =>
+    setInfLinks((prev) => prev.map((v, i) => (i === idx ? { ...v, text: value } : v)));
+
+  const changeLinkUrl = (idx: number, value: string) =>
+    setInfLinks((prev) => prev.map((v, i) => (i === idx ? { ...v, url: value } : v)));
+
+  // 체크박스 토글
   const toggleId = (arr: string[], setArr: (v: string[]) => void, id: string) =>
     setArr(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
 
@@ -215,22 +255,27 @@ export default function AdminPage() {
         avatar_url = pub?.publicUrl ?? null;
       }
 
-      // 2) links 정리
-      const links = infLinks.map((v) => v.trim()).filter(Boolean);
+      // 2) links 정리: 빈 줄 제외 + 간단 검증
+      const links: LinkItem[] = infLinks
+        .map(({ text, url }) => ({
+          text: (text ?? '').trim(),
+          url: (url ?? '').trim(),
+        }))
+        .filter((x) => x.url.length > 0);
 
       // 3) INSERT
       const { error } = await supabase.from('influencers').insert({
         name: infName.trim(),
         slug: infSlug.trim(),
         avatar_url,
-        links, // jsonb 배열로 저장
+        links, // [{text,url}] 형태로 저장 (jsonb)
       });
       if (error) throw error;
 
       // 4) 리셋 & 리로드
       setInfName('');
       setInfSlug('');
-      setInfLinks(['']);
+      setInfLinks([{ text: '', url: '' }]);
       onAvatarChange(null);
       await loadAll();
       setMsg('인플루언서가 생성되었습니다.');
@@ -348,7 +393,7 @@ export default function AdminPage() {
                 <img
                   src={avatarPreview}
                   alt="avatar preview"
-                  style={{ width: 96, height: 96, borderRadius: 12, objectFit: 'cover' }}
+                  style={{ width: 96, height: 96, borderRadius: 12, objectFit: 'cover', marginTop: 8 }}
                 />
               )}
               <span className={styles.help}>
@@ -356,17 +401,23 @@ export default function AdminPage() {
               </span>
             </label>
 
-            {/* 링크 입력 */}
+            {/* 링크 입력: 텍스트 + URL */}
             <div>
-              <div className={styles.fieldsetTitle}>링크(여러 개 가능)</div>
+              <div className={styles.fieldsetTitle}>링크(표시 텍스트 + URL)</div>
               <div className={styles.linksStack}>
-                {infLinks.map((v, i) => (
+                {infLinks.map((row, i) => (
                   <div key={i} className={styles.linkRow}>
                     <input
                       className={styles.input}
-                      placeholder="https://example.com/..."
-                      value={v}
-                      onChange={(e) => changeLink(i, e.target.value)}
+                      placeholder="표시 텍스트 (예: 인스타그램)"
+                      value={row.text}
+                      onChange={(e) => changeLinkText(i, e.target.value)}
+                    />
+                    <input
+                      className={styles.input}
+                      placeholder="https://example.com/username"
+                      value={row.url}
+                      onChange={(e) => changeLinkUrl(i, e.target.value)}
                     />
                     <div className={styles.rowRight}>
                       <button
@@ -395,7 +446,7 @@ export default function AdminPage() {
                 onClick={() => {
                   setInfName('');
                   setInfSlug('');
-                  setInfLinks(['']);
+                  setInfLinks([{ text: '', url: '' }]);
                   onAvatarChange(null);
                 }}
               >
@@ -411,93 +462,97 @@ export default function AdminPage() {
         <div className={styles.fieldset}>
           <div className={styles.fieldsetTitle}>새 포스트 생성 & 연결</div>
 
-          <div className={styles.form}>
-            <label className={styles.label}>
-              제목
+        <div className={styles.form}>
+          <label className={styles.label}>
+            제목
+            <input
+              className={styles.input}
+              placeholder="포스트 제목"
+              value={postTitle}
+              onChange={(e) => setPostTitle(e.target.value)}
+            />
+          </label>
+
+          <label className={styles.label}>
+            공개 여부
+            <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
               <input
-                className={styles.input}
-                placeholder="포스트 제목"
-                value={postTitle}
-                onChange={(e) => setPostTitle(e.target.value)}
+                type="checkbox"
+                checked={postPublished}
+                onChange={(e) => setPostPublished(e.target.checked)}
               />
+              <span>Published</span>
             </label>
+          </label>
 
-            <label className={styles.label}>
-              공개 여부
-              <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-                <input
-                  type="checkbox"
-                  checked={postPublished}
-                  onChange={(e) => setPostPublished(e.target.checked)}
-                />
-                <span>Published</span>
-              </label>
-            </label>
-
-            {/* 연결할 인플루언서 */}
-            <div>
-              <div className={styles.fieldsetTitle}>연결할 인플루언서</div>
-              <div className={styles.linksStack}>
-                {influencers.length === 0 && (
-                  <div className={styles.hint}>등록된 인플루언서가 없습니다.</div>
-                )}
-                {influencers.map((inf) => (
-                  <label key={inf.id} className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selectedInfIds.includes(inf.id)}
-                      onChange={() => toggleId(selectedInfIds, setSelectedInfIds, inf.id)}
-                    />
-                    <span>
-                      {inf.name ?? '—'} ({inf.slug ?? '—'})
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* 연결할 제품 */}
-            <div>
-              <div className={styles.fieldsetTitle}>연결할 제품(착용)</div>
-              <div className={styles.linksStack}>
-                {products.length === 0 && (
-                  <div className={styles.hint}>등록된 제품이 없습니다.</div>
-                )}
-                {products.map((p) => (
-                  <label key={p.id} className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selectedProductIds.includes(p.id)}
-                      onChange={() => toggleId(selectedProductIds, setSelectedProductIds, p.id)}
-                    />
-                    <span>
-                      {p.name ?? '—'} ({p.slug ?? '—'})
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className={styles.footer}>
-              <button
-                className={`${styles.btn} ${styles.btnPrimary}`}
-                onClick={createPostWithLinks}
-              >
-                생성 + 연결
-              </button>
-              <button
-                className={`${styles.btn} ${styles.btnGhost}`}
-                onClick={() => {
-                  setPostTitle('');
-                  setPostPublished(false);
-                  setSelectedInfIds([]);
-                  setSelectedProductIds([]);
-                }}
-              >
-                초기화
-              </button>
+          {/* 연결할 인플루언서 */}
+          <div>
+            <div className={styles.fieldsetTitle}>연결할 인플루언서</div>
+            <div className={styles.linksStack}>
+              {influencers.length === 0 && (
+                <div className={styles.hint}>등록된 인플루언서가 없습니다.</div>
+              )}
+              {influencers.map((inf) => (
+                <label key={inf.id} className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedInfIds.includes(inf.id)}
+                    onChange={() =>
+                      toggleId(selectedInfIds, setSelectedInfIds, inf.id)
+                    }
+                  />
+                  <span>
+                    {inf.name ?? '—'} ({inf.slug ?? '—'})
+                  </span>
+                </label>
+              ))}
             </div>
           </div>
+
+          {/* 연결할 제품 */}
+          <div>
+            <div className={styles.fieldsetTitle}>연결할 제품(착용)</div>
+            <div className={styles.linksStack}>
+              {products.length === 0 && (
+                <div className={styles.hint}>등록된 제품이 없습니다.</div>
+              )}
+              {products.map((p) => (
+                <label key={p.id} className="inline-flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedProductIds.includes(p.id)}
+                    onChange={() =>
+                      toggleId(selectedProductIds, setSelectedProductIds, p.id)
+                    }
+                  />
+                  <span>
+                    {p.name ?? '—'} ({p.slug ?? '—'})
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.footer}>
+            <button
+              className={`${styles.btn} ${styles.btnPrimary}`}
+              onClick={createPostWithLinks}
+            >
+              생성 + 연결
+            </button>
+            <button
+              className={`${styles.btn} ${styles.btnGhost}`}
+              onClick={() => {
+                setPostTitle('');
+                setPostPublished(false);
+                setSelectedInfIds([]);
+                setSelectedProductIds([]);
+              }}
+            >
+              초기화
+            </button>
+          </div>
+        </div>
         </div>
       </section>
 
