@@ -10,7 +10,7 @@ export default function Header() {
           className="tab-btn"
           aria-label="검색"
           title="검색"
-          onClick={() => {}}
+          onClick={() => (window as any).__openSearchModal?.()}
         >
           <svg className="icon-24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <circle cx="11" cy="11" r="7" strokeWidth="1.5"/>

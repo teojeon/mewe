@@ -22,17 +22,22 @@ function sanitizeFileName(name: string) {
   const ext = parts.length > 1 ? parts.pop()!.toLowerCase() : '';
   const base = parts.join('.');
   const normalized = base.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
-  const safeBase = normalized.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '');
+  const safeBase = normalized
+    .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
   const safeExt = ext.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
   return `${safeBase || 'file'}.${safeExt || 'dat'}`;
 }
-const makeCoverPath = (fileName: string) => `covers/${Date.now()}-${sanitizeFileName(fileName)}`;
+const makeCoverPath = (fileName: string) =>
+  `covers/${Date.now()}-${sanitizeFileName(fileName)}`;
 
 export default function NewPostPage() {
   const supabase = useMemo(() => createClientComponentClient(), []);
   const router = useRouter();
   const sp = useSearchParams();
 
+  // 🔑 i/[slug]의 “새 글” 버튼에서 붙여준 ?author=<influencer_id>
   const authorInfluencerId = sp.get('author') || '';
 
   const [loading, setLoading] = useState(false);
@@ -47,6 +52,15 @@ export default function NewPostPage() {
     { brand: '', name: '', url: '' },
   ]);
 
+  // (선행) authorInfluencerId 없으면 안내
+  useEffect(() => {
+    if (!authorInfluencerId) {
+      setMsg(
+        'author 파라미터가 필요합니다. i/[slug] 페이지의 “새 글” 버튼으로 진입해 주세요.',
+      );
+    }
+  }, [authorInfluencerId]);
+
   const onCoverChange = (file: File | null) => {
     setCoverFile(file);
     setCoverPreview(file ? URL.createObjectURL(file) : null);
@@ -57,14 +71,9 @@ export default function NewPostPage() {
   const removeProductRow = (idx: number) =>
     setNewProducts((prev) => prev.filter((_, i) => i !== idx));
   const changeProduct = (idx: number, key: keyof NewProduct, value: string) =>
-    setNewProducts((prev) => prev.map((v, i) => (i === idx ? { ...v, [key]: value } : v)));
-
-  // (선행) authorInfluencerId가 없으면 접근 막기
-  useEffect(() => {
-    if (!authorInfluencerId) {
-      setMsg('author 파라미터가 필요합니다. i/[slug]에서 “새 글” 버튼으로 들어오세요.');
-    }
-  }, [authorInfluencerId]);
+    setNewProducts((prev) =>
+      prev.map((v, i) => (i === idx ? { ...v, [key]: value } : v)),
+    );
 
   const create = async () => {
     setMsg('');
@@ -79,7 +88,7 @@ export default function NewPostPage() {
 
     setLoading(true);
     try {
-      // 0) (선택) 클라이언트에서 membership 가드
+      // 0) (선택) 클라이언트 가드: 해당 인플루언서 owner/editor인지
       const { data: u } = await supabase.auth.getUser();
       const uid = u?.user?.id;
       if (!uid) throw new Error('로그인이 필요합니다.');
@@ -92,7 +101,7 @@ export default function NewPostPage() {
         .maybeSingle();
       if (!mem) throw new Error('권한이 없습니다.');
 
-      // 1) 커버 업로드
+      // 1) 커버 업로드(선택)
       let cover_image_url: string | null = null;
       if (coverFile) {
         const key = makeCoverPath(coverFile.name);
@@ -108,7 +117,7 @@ export default function NewPostPage() {
         cover_image_url = pub?.publicUrl ?? null;
       }
 
-      // 2) posts insert (대표 인플루언서 포함)
+      // 2) posts.insert — 🔑 author_influencer_id 반드시 포함 (RLS 통과 요건)
       const { data: created, error: postErr } = await supabase
         .from('posts')
         .insert({
@@ -122,7 +131,7 @@ export default function NewPostPage() {
       if (postErr) throw postErr;
       const newPostId = String(created?.id);
 
-      // 3) 새 제품 upsert → 연결
+      // 3) 새 제품 upsert → posts_products 연결
       const toUpsert = newProducts
         .map((p) => ({
           brand: (p.brand ?? '').trim(),
@@ -141,17 +150,21 @@ export default function NewPostPage() {
           .upsert(toUpsert, { onConflict: 'slug' })
           .select('id');
         if (upErr) throw upErr;
+
         const productIds = (upserted ?? []).map((r: any) => String(r.id));
         if (productIds.length > 0) {
-          const links = productIds.map((pid) => ({ post_id: newPostId, product_id: pid }));
-          const { error: linkErr } = await supabase.from('posts_products').insert(links);
+          const links = productIds.map((pid) => ({
+            post_id: newPostId,
+            product_id: pid,
+          }));
+          const { error: linkErr } =
+            await supabase.from('posts_products').insert(links);
           if (linkErr) throw linkErr;
         }
       }
 
-      // 4) 끝: 상세/편집으로 이동(원하는 쪽 택1)
-      // router.replace(`/post/${newPostId}`); // 상세로
-      router.replace(`/post/${newPostId}/edit`); // 편집으로
+      // 4) 완료 → 편집으로 이동(또는 상세 페이지로 교체 가능)
+      router.replace(`/post/${newPostId}/edit`);
     } catch (e: any) {
       setMsg(`생성 실패: ${e?.message ?? e}`);
     } finally {
@@ -164,7 +177,10 @@ export default function NewPostPage() {
       <header className={styles.header}>
         <h1 className={styles.title}>새 포스트</h1>
         <div className={styles.actions}>
-          <button className={`${styles.btn} ${styles.btnGhost}`} onClick={() => history.back()}>
+          <button
+            className={`${styles.btn} ${styles.btnGhost}`}
+            onClick={() => router.back()}
+          >
             ← 뒤로가기
           </button>
         </div>
@@ -178,53 +194,119 @@ export default function NewPostPage() {
           <div className={styles.form}>
             <label className={styles.label}>
               제목
-              <input className={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목" />
+              <input
+                className={styles.input}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="제목"
+              />
             </label>
 
-            <label className={styles.label} style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
-              <input type="checkbox" checked={published} onChange={(e) => setPublished(e.target.checked)} />
+            <label
+              className={styles.label}
+              style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}
+            >
+              <input
+                type="checkbox"
+                checked={published}
+                onChange={(e) => setPublished(e.target.checked)}
+              />
               <span>Published</span>
             </label>
 
+            {/* 커버 이미지 업로드 */}
             <div className={styles.label}>
               <div className={styles.fieldsetTitle}>커버 이미지</div>
               {coverPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={coverPreview}
                   alt="cover"
-                  style={{ width: 160, height: 160, borderRadius: 12, objectFit: 'cover', background: '#eee' }}
+                  style={{
+                    width: 160,
+                    height: 160,
+                    borderRadius: 12,
+                    objectFit: 'cover',
+                    background: '#eee',
+                  }}
                 />
               ) : (
                 <div className={styles.hint}>현재 커버 없음</div>
               )}
-              <input className={styles.input} type="file" accept="image/*" onChange={(e) => onCoverChange(e.target.files?.[0] ?? null)} />
-              <span className={styles.help}>covers 버킷에 업로드되어 posts.cover_image_url에 저장됩니다.</span>
+              <input
+                className={styles.input}
+                type="file"
+                accept="image/*"
+                onChange={(e) => onCoverChange(e.target.files?.[0] ?? null)}
+              />
+              <span className={styles.help}>
+                covers 버킷에 업로드되어 posts.cover_image_url에 저장됩니다.
+              </span>
             </div>
 
+            {/* 새 제품 추가 폼 */}
             <div>
               <div className={styles.fieldsetTitle}>제품 추가 (브랜드/제품명/링크)</div>
               <div className={styles.linksStack}>
                 {newProducts.map((row, i) => (
-                  <div key={i} className={styles.linkRow} style={{ gridTemplateColumns: '1fr 1fr 1fr auto' }}>
-                    <input className={styles.input} placeholder="브랜드" value={row.brand} onChange={(e) => changeProduct(i, 'brand', e.target.value)} />
-                    <input className={styles.input} placeholder="제품명" value={row.name} onChange={(e) => changeProduct(i, 'name', e.target.value)} />
-                    <input className={styles.input} placeholder="링크(URL)" value={row.url} onChange={(e) => changeProduct(i, 'url', e.target.value)} />
+                  <div
+                    key={i}
+                    className={styles.linkRow}
+                    style={{ gridTemplateColumns: '1fr 1fr 1fr auto' }}
+                  >
+                    <input
+                      className={styles.input}
+                      placeholder="브랜드"
+                      value={row.brand}
+                      onChange={(e) =>
+                        changeProduct(i, 'brand', e.target.value)
+                      }
+                    />
+                    <input
+                      className={styles.input}
+                      placeholder="제품명"
+                      value={row.name}
+                      onChange={(e) => changeProduct(i, 'name', e.target.value)}
+                    />
+                    <input
+                      className={styles.input}
+                      placeholder="링크(URL)"
+                      value={row.url}
+                      onChange={(e) => changeProduct(i, 'url', e.target.value)}
+                    />
                     <div className={styles.rowRight}>
-                      <button className={`${styles.btn} ${styles.btnGhost}`} onClick={() => removeProductRow(i)}>삭제</button>
+                      <button
+                        className={`${styles.btn} ${styles.btnGhost}`}
+                        onClick={() => removeProductRow(i)}
+                      >
+                        삭제
+                      </button>
                     </div>
                   </div>
                 ))}
                 <div className={styles.rowRight}>
-                  <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={addProductRow}>+ 제품 추가</button>
+                  <button
+                    className={`${styles.btn} ${styles.btnSecondary}`}
+                    onClick={addProductRow}
+                  >
+                    + 제품 추가
+                  </button>
                 </div>
               </div>
             </div>
 
             <div className={styles.footer}>
-              <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={create} disabled={loading}>
+              <button
+                className={`${styles.btn} ${styles.btnPrimary}`}
+                onClick={create}
+                disabled={loading}
+              >
                 {loading ? '생성 중…' : '생성'}
               </button>
-              <button className={`${styles.btn} ${styles.btnGhost}`} onClick={() => router.back()}>
+              <button
+                className={`${styles.btn} ${styles.btnGhost}`}
+                onClick={() => router.back()}
+              >
                 취소
               </button>
             </div>
