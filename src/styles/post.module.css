@@ -13,7 +13,7 @@
   font-size: 14px;
 }
 
-/* 상단 로컬 헤더: mewe/검색 제거, 인플루언서 Name만 노출 */
+/* 상단 로컬 헤더: mewe/검색 제거, 인플루언서 Name → @slug 표기 */
 .topbar {
   position: sticky;
   top: 0;
@@ -22,9 +22,37 @@
   border-bottom: 1px solid rgba(0,0,0,0.08);
   padding: 12px 16px;
 }
+/* ⬇️ 추가: 좌우 정렬 레이아웃 */
+.topbarRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .topTitle {
   font-weight: 700;
+  font-size: 15px;
 }
+
+/* 모던한 우측 버튼 */
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: #111;
+  text-decoration: none;
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.05),
+    0 6px 16px rgba(0,0,0,0.06);
+  transition: transform 80ms ease, background 150ms ease, border-color 150ms ease;
+}
+.backBtn:hover { background: #f9f9f9; border-color: rgba(0,0,0,0.14); }
+.backBtn:active { transform: translateY(1px); }
+.backIcon { transform: translateX(1px); }
 
 /* 커버 이미지 */
 .cover {
@@ -69,13 +97,13 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 12px; /* 카드 간격 조금 여유 */
+  gap: 12px;
 }
 
 /* 각 행을 카드형으로 */
 .prodItem {
   display: grid;
-  grid-template-columns: 32px 1fr; /* 번호 배지 + 본문 */
+  grid-template-columns: 32px 1fr;
   gap: 12px;
   align-items: start;
   background: #fff;
@@ -87,7 +115,7 @@
     0 8px 20px rgba(0,0,0,0.04);
 }
 
-/* 번호 배지: 더 미니멀하게 */
+/* 번호 배지 */
 .num {
   width: 28px;
   height: 28px;
@@ -120,11 +148,11 @@
 .dot { opacity: 0.5; }
 .prodName { color: #111; }
 
-/* '제품 더 알아보기' 버튼: i/[slug] 스타일 재사용 + 살짝 소형화 */
+/* '제품 더 알아보기' 버튼: i/[slug] 스타일 재사용 + 소형화 보정 */
 .prodLink {
-  font-size: 13px;           /* ✅ 주변 텍스트와 조화 */
-  padding: 8px 12px;         /* 살짝 컴팩트 */
-  border-width: 1px;         /* 얇게 */
+  font-size: 13px;
+  padding: 8px 12px;
+  border-width: 1px;
   box-shadow:
     0 1px 1px rgba(0,0,0,0.04),
     0 6px 14px rgba(0,0,0,0.06);
