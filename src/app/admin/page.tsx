@@ -1,30 +1,26 @@
-// src/app/admin/page.tsx
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import type { Database } from '@/types/supabase';
 
 type PostRow = Database['public']['Tables']['posts']['Row'];
 type InfluencerRow = Database['public']['Tables']['influencers']['Row'];
 
-// 화면에서 사용하는 형태로 가공된 타입
-type InfluencerLite = { name: string | null; slug: string | null } | null;
-
+type InfluencerLite = { name: string | null; slug: string | null };
 type RowPost = {
-  id: number;
+  id: string | number;             // uuid 또는 bigint 모두 허용
   title: string | null;
-  created_at: string;           // ISO string
+  created_at: string;              // ISO string
   published: boolean | null;
-  influencer_id: number | null;
-  influencers: InfluencerLite;  // ✅ 단일 객체 | null 로 통일
+  influencers: InfluencerLite[];   // 여러 명
 };
 
 export default function AdminPage() {
   const supabase = useMemo(() => createClientComponentClient<Database>(), []);
   const [posts, setPosts] = useState<RowPost[]>([]);
-  const [msg, setMsg] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
+  const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchPosts = async () => {
@@ -32,69 +28,61 @@ export default function AdminPage() {
         setLoading(true);
         setMsg('');
 
+        // ✅ 다대다(M:N): posts_influencers → influencers 조인
         const { data, error } = await supabase
           .from('posts')
-          .select(
-            `
+          .select(`
             id,
             title,
             created_at,
             published,
-            influencer_id,
-            influencers (
-              name,
-              slug
+            posts_influencers (
+              influencers (
+                name,
+                slug
+              )
             )
-          `
-          )
+          `)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
 
-        // ✅ influencers가 배열/객체 어떤 형태로 와도 단일 객체 | null 로 정규화
         const normalized: RowPost[] = (data ?? []).map((row: any) => {
-          const raw = row?.influencers;
+          const pivots: any[] = Array.isArray(row?.posts_influencers)
+            ? row.posts_influencers
+            : [];
 
-          const normalizedInfluencer: InfluencerLite = Array.isArray(raw)
-            ? (raw[0]
-                ? {
-                    name:
-                      typeof raw[0].name === 'string' || raw[0].name === null
-                        ? raw[0].name
-                        : String(raw[0].name ?? ''),
-                    slug:
-                      typeof raw[0].slug === 'string' || raw[0].slug === null
-                        ? raw[0].slug
-                        : String(raw[0].slug ?? ''),
-                  }
-                : null)
-            : raw
-            ? {
-                name:
-                  typeof raw.name === 'string' || raw.name === null
-                    ? raw.name
-                    : String(raw.name ?? ''),
-                slug:
-                  typeof raw.slug === 'string' || raw.slug === null
-                    ? raw.slug
-                    : String(raw.slug ?? ''),
-              }
-            : null;
+          const influencers: InfluencerLite[] = pivots
+            .map((pi) => pi?.influencers ?? null)
+            .filter(Boolean)
+            .map((inf: any) => ({
+              name:
+                typeof inf?.name === 'string' || inf?.name === null
+                  ? inf?.name
+                  : String(inf?.name ?? ''),
+              slug:
+                typeof inf?.slug === 'string' || inf?.slug === null
+                  ? inf?.slug
+                  : String(inf?.slug ?? ''),
+            }));
 
-        return {
-            id: Number(row.id),
+          return {
+            id: row.id,
             title: row.title ?? null,
-            created_at: typeof row.created_at === 'string' ? row.created_at : String(row.created_at),
-            published: typeof row.published === 'boolean' ? row.published : Boolean(row.published),
-            influencer_id:
-              row.influencer_id === null || row.influencer_id === undefined
+            created_at:
+              typeof row.created_at === 'string'
+                ? row.created_at
+                : String(row.created_at),
+            published:
+              typeof row.published === 'boolean'
+                ? row.published
+                : row.published == null
                 ? null
-                : Number(row.influencer_id),
-            influencers: normalizedInfluencer,
+                : Boolean(row.published),
+            influencers,
           } as RowPost;
         });
 
-        // ✅ 강제 캐스팅 제거, 정규화된 값으로 세팅
         setPosts(normalized);
       } catch (err: any) {
         setMsg(`목록을 불러오지 못했습니다: ${err?.message ?? err}`);
@@ -110,12 +98,11 @@ export default function AdminPage() {
     <main className="p-6 max-w-5xl mx-auto">
       <header className="mb-6">
         <h1 className="text-2xl font-semibold">Admin · Posts</h1>
-        <p className="text-sm text-gray-500">
-          게시물 목록 / 인플루언서 매핑 확인용
-        </p>
+        <p className="text-sm text-gray-500">게시물 목록 / 인플루언서 매핑 (M:N)</p>
       </header>
 
       {loading && <p className="text-gray-600">불러오는 중… ⏳</p>}
+
       {msg && !loading && (
         <div className="rounded-lg bg-red-50 text-red-700 px-4 py-3 mb-4">
           {msg}
@@ -133,24 +120,24 @@ export default function AdminPage() {
               <tr>
                 <th className="text-left font-medium px-4 py-3">ID</th>
                 <th className="text-left font-medium px-4 py-3">Title</th>
-                <th className="text-left font-medium px-4 py-3">Influencer</th>
+                <th className="text-left font-medium px-4 py-3">Influencers</th>
                 <th className="text-left font-medium px-4 py-3">Published</th>
                 <th className="text-left font-medium px-4 py-3">Created</th>
               </tr>
             </thead>
             <tbody>
               {posts.map((p) => (
-                <tr key={p.id} className="border-t">
-                  <td className="px-4 py-3">{p.id}</td>
+                <tr key={String(p.id)} className="border-t">
+                  <td className="px-4 py-3">{String(p.id)}</td>
                   <td className="px-4 py-3">{p.title ?? '—'}</td>
                   <td className="px-4 py-3">
-                    {p.influencers
-                      ? `${p.influencers.name ?? '—'} (${p.influencers.slug ?? '—'})`
+                    {p.influencers.length > 0
+                      ? p.influencers
+                          .map((inf) => `${inf.name ?? '—'} (${inf.slug ?? '—'})`)
+                          .join(', ')
                       : '—'}
                   </td>
-                  <td className="px-4 py-3">
-                    {p.published ? '✅' : '❌'}
-                  </td>
+                  <td className="px-4 py-3">{p.published ? '✅' : '❌'}</td>
                   <td className="px-4 py-3">
                     {new Date(p.created_at).toLocaleString()}
                   </td>
