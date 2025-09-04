@@ -6,7 +6,9 @@ import { cookies } from 'next/headers';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 
 import styles from '@/styles/post.module.css';
-import feedStyles from '@/styles/feed.module.css'; // .linkBtn 재사용 (제품 링크용)
+import feedStyles from '@/styles/feed.module.css'; // 제품 링크 버튼 재사용
+import { canManagePost } from '@/lib/acl';
+import { deletePostAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,13 +20,14 @@ type PostVM = {
   title: string | null;
   cover_image_url: string | null;
   body: string | null;
-  meta_products: ProductMeta[];
-  influencer: InfluencerVM | null;
+  meta_products: ProductMeta[]; // meta.products OR 관계 테이블에서 추출
+  influencer: InfluencerVM | null; // posts_influencers 우선, 없으면 posts.influencer_id로 조회
 };
 
 async function fetchPostVM(postId: string): Promise<PostVM | null> {
   const supabase = createServerComponentClient({ cookies });
 
+  // 1) 포스트 + 관계(인플루언서/제품) 한 번에
   const { data, error } = await supabase
     .from('posts')
     .select(
@@ -49,7 +52,7 @@ async function fetchPostVM(postId: string): Promise<PostVM | null> {
   if (error) throw error;
   if (!data) return null;
 
-  // 인플루언서: 다대다 우선, 없으면 단일 FK 폴백
+  // 2) 인플루언서 결정: 다대다 우선, 없으면 단일 FK(influencer_id) 폴백
   let influencer: InfluencerVM | null = null;
   const relInf = Array.isArray((data as any).posts_influencers)
     ? (data as any).posts_influencers[0]?.influencers
@@ -58,8 +61,14 @@ async function fetchPostVM(postId: string): Promise<PostVM | null> {
   if (relInf?.id) {
     influencer = {
       id: String(relInf.id),
-      name: typeof relInf.name === 'string' || relInf.name === null ? relInf.name : String(relInf.name ?? ''),
-      slug: typeof relInf.slug === 'string' || relInf.slug === null ? relInf.slug : String(relInf.slug ?? ''),
+      name:
+        typeof relInf.name === 'string' || relInf.name === null
+          ? relInf.name
+          : String(relInf.name ?? ''),
+      slug:
+        typeof relInf.slug === 'string' || relInf.slug === null
+          ? relInf.slug
+          : String(relInf.slug ?? ''),
     };
   } else if ((data as any).influencer_id) {
     const { data: infRow, error: infErr } = await supabase
@@ -71,13 +80,19 @@ async function fetchPostVM(postId: string): Promise<PostVM | null> {
     if (infRow) {
       influencer = {
         id: String(infRow.id),
-        name: typeof infRow.name === 'string' || infRow.name === null ? infRow.name : String(infRow.name ?? ''),
-        slug: typeof infRow.slug === 'string' || infRow.slug === null ? infRow.slug : String(infRow.slug ?? ''),
+        name:
+          typeof (infRow as any).name === 'string' || (infRow as any).name === null
+            ? (infRow as any).name
+            : String((infRow as any).name ?? ''),
+        slug:
+          typeof (infRow as any).slug === 'string' || (infRow as any).slug === null
+            ? (infRow as any).slug
+            : String((infRow as any).slug ?? ''),
       };
     }
   }
 
-  // 제품: meta.products 우선, 없으면 관계 테이블에서
+  // 3) 제품 목록: meta.products 우선, 없으면 관계(posts_products→products)에서 추출
   let meta_products: ProductMeta[] = [];
   const meta = (data as any).meta;
   if (meta && Array.isArray(meta.products)) {
@@ -103,7 +118,8 @@ async function fetchPostVM(postId: string): Promise<PostVM | null> {
   return {
     id: String((data as any).id),
     title: (data as any)?.title ?? null,
-    cover_image_url: typeof (data as any)?.cover_image_url === 'string' ? (data as any).cover_image_url : null,
+    cover_image_url:
+      typeof (data as any)?.cover_image_url === 'string' ? (data as any).cover_image_url : null,
     body: typeof (data as any)?.body === 'string' ? (data as any).body : null,
     meta_products,
     influencer,
@@ -130,24 +146,39 @@ export default async function Page({ params }: { params: { id: string } }) {
   }
 
   const products = vm.meta_products;
-  const slug = vm.influencer?.slug ?? '';
+  const slug = vm.influencer?.slug ?? null;
+
+  // ❗ 권한 체크 → 편집/삭제 버튼 노출 여부
+  const manageable = await canManagePost(vm.influencer?.id ?? null);
 
   return (
     <main className={styles.wrap}>
-      {/* 상단 로컬 바: 왼쪽 @slug, 오른쪽 '프로필로' 버튼 */}
+      {/* 상단 바: 왼쪽 @slug, 오른쪽 퀵 액션 */}
       <header className={styles.topbar}>
         <div className={styles.topbarRow}>
           <div className={styles.topTitle}>{slug ? `@${slug}` : ''}</div>
-          {slug ? (
-            <Link
-              href={`/i/${slug}`}
-              className={styles.backBtn}
-              aria-label="인플루언서 프로필로 이동"
-            >
-              프로필로
-              <span className={styles.backIcon}>→</span>
-            </Link>
-          ) : null}
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            {manageable && (
+              <>
+                <Link className={styles.backBtn} href={`/post/${vm.id}/edit`}>
+                  편집
+                </Link>
+                <form action={deletePostAction.bind(null, vm.id, slug)}>
+                  <button
+                    className={styles.backBtn}
+                    style={{ borderColor: 'rgba(255,0,0,0.25)', color: '#c00' }}
+                  >
+                    삭제
+                  </button>
+                </form>
+              </>
+            )}
+            {slug && (
+              <Link className={styles.backBtn} href={`/i/${slug}`}>
+                프로필로 →
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 

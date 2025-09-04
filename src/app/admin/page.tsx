@@ -81,6 +81,8 @@ export default function AdminPage() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [selectedInfIds, setSelectedInfIds] = useState<string[]>([]);
+  // ✅ 대표 인플루언서 선택 (RLS insert에 필수)
+  const [authorInfId, setAuthorInfId] = useState<string>('');
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [newProducts, setNewProducts] = useState<NewProduct[]>([{ brand: '', name: '', url: '' }]);
 
@@ -282,6 +284,11 @@ export default function AdminPage() {
         setMsg('포스트 제목을 입력해 주세요.');
         return;
       }
+      // ✅ 대표 인플루언서 선택 필수 (RLS insert 통과 조건)
+      if (!authorInfId) {
+        setMsg('대표 인플루언서를 선택해 주세요.');
+        return;
+      }
 
       // 1) 커버 업로드
       let cover_image_url: string | null = null;
@@ -295,16 +302,21 @@ export default function AdminPage() {
         cover_image_url = pub?.publicUrl ?? null;
       }
 
-      // 2) posts insert
+      // 2) posts insert  ✅ author_influencer_id 포함
       const { data: created, error: postErr } = await supabase
         .from('posts')
-        .insert({ title: postTitle.trim(), published: postPublished, cover_image_url })
+        .insert({
+          title: postTitle.trim(),
+          published: postPublished,
+          cover_image_url,
+          author_influencer_id: authorInfId, // ★ 핵심
+        })
         .select('id')
         .single();
       if (postErr) throw postErr;
       const newPostId = String(created?.id);
 
-      // 3) 연결: 인플루언서
+      // 3) 연결: 인플루언서(멀티)
       if (selectedInfIds.length > 0) {
         const rows = selectedInfIds.map((infId) => ({ post_id: newPostId, influencer_id: infId }));
         const { error: linkErr } = await supabase.from('posts_influencers').insert(rows);
@@ -340,6 +352,7 @@ export default function AdminPage() {
       setSelectedInfIds([]); setSelectedProductIds([]);
       setNewProducts([{ brand: '', name: '', url: '' }]);
       setCoverFile(null); setCoverPreview(null);
+      setAuthorInfId('');
       await loadAll();
       setMsg('포스트가 생성되고 커버/인플루언서/제품이 연결되었습니다.');
     } catch (e: any) {
@@ -639,6 +652,20 @@ export default function AdminPage() {
               <span className={styles.help}>covers 버킷에 업로드되어 posts.cover_image_url에 저장됩니다.</span>
             </label>
 
+            {/* ✅ 대표 인플루언서 선택 (RLS insert 필수) */}
+            <label className={styles.label}>
+              대표 인플루언서
+              <select className={styles.select} value={authorInfId} onChange={(e) => setAuthorInfId(e.target.value)}>
+                <option value="">선택하세요</option>
+                {influencers.map((inf) => (
+                  <option key={inf.id} value={inf.id}>
+                    {inf.name ?? '—'} ({inf.slug ?? '—'})
+                  </option>
+                ))}
+              </select>
+              <span className={styles.help}>권한이 있는 인플루언서를 선택해야 저장됩니다.</span>
+            </label>
+
             {/* 연결 인플루언서 */}
             <div>
               <div className={styles.fieldsetTitle}>연결할 인플루언서</div>
@@ -690,6 +717,7 @@ export default function AdminPage() {
                 setSelectedInfIds([]); setSelectedProductIds([]);
                 setNewProducts([{ brand: '', name: '', url: '' }]);
                 setCoverFile(null); setCoverPreview(null);
+                setAuthorInfId('');
               }}>초기화</button>
             </div>
           </div>
@@ -720,7 +748,7 @@ export default function AdminPage() {
                 </thead>
                 <tbody>
                   {posts.map((p) => (
-                    <tr key={p.id} className="border-top">
+                    <tr key={p.id} className="border-t">
                       <td className="px-2 py-2">{p.id}</td>
                       <td className="px-2 py-2">{p.title ?? '—'}</td>
                       <td className="px-2 py-2">{p.influencers.length > 0 ? p.influencers.map((inf) => `${inf.name ?? '—'} (${inf.slug ?? '—'})`).join(', ') : '—'}</td>

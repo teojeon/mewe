@@ -10,3 +10,4 @@ dist/
 !.env.example
 # misc
 .DS_Store
+.env.local
