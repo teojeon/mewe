@@ -3,23 +3,29 @@ import Image from "next/image";
 import Link from "next/link";
 import { supabasePublic } from "@/lib/supabase-client";
 import styles from "@/styles/post.module.css";
-import feedStyles from "@/styles/feed.module.css"; // .linkBtn 재사용
+import feedStyles from "@/styles/feed.module.css";
 
 type PostRow = {
   id: string;
   influencer_id: string;
   title: string | null;
-  cover_image_url: string | null;
+  cover_image_url: string | null; // 이제 storage path
   body: string | null;
   meta: any | null; // { products?: {brand,name,link}[] }
 };
+type Influencer = { id: string; name: string | null; slug: string | null };
 
-type Influencer = {
-  id: string;
-  name: string | null;
-  slug: string | null;
-  // title 같은 필드는 사용하지 않음 (의도적으로 배제)
-};
+const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
+async function signUrl(bucket: string, path: string, expiresSec = 3600) {
+  const res = await fetch(
+    `${BASE_URL}/api/sign?bucket=${bucket}&path=${encodeURIComponent(path)}&expires=${expiresSec}`,
+    { cache: "no-store" }
+  );
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error || "sign failed");
+  return j.url as string;
+}
 
 async function getPostById(id: string): Promise<PostRow | null> {
   const { data, error } = await supabasePublic
@@ -27,25 +33,17 @@ async function getPostById(id: string): Promise<PostRow | null> {
     .select("id,influencer_id,title,cover_image_url,body,meta")
     .eq("id", id)
     .maybeSingle();
-
-  if (error) {
-    console.error(error);
-    return null;
-  }
+  if (error) { console.error(error); return null; }
   return (data as PostRow) ?? null;
 }
 
 async function getInfluencerById(id: string): Promise<Influencer | null> {
   const { data, error } = await supabasePublic
     .from("influencers")
-    .select("id,name,slug") // ✅ title 등 기타 필드 불러오지 않음
+    .select("id,name,slug")
     .eq("id", id)
     .maybeSingle();
-
-  if (error) {
-    console.error(error);
-    return null;
-  }
+  if (error) { console.error(error); return null; }
   return (data as Influencer) ?? null;
 }
 
@@ -63,32 +61,25 @@ export default async function Page({ params }: { params: { id: string } }) {
   const products: Array<{ brand?: string; name?: string; link?: string }> =
     post.meta?.products ?? [];
 
+  const coverSrc = post.cover_image_url
+    ? await signUrl("covers", post.cover_image_url, 3600)
+    : null;
+
   return (
     <main className={styles.wrap}>
-      {/* 상단: mewe/검색 대신 인플루언서 Name (폰트 크기 기존 유지) */}
       <header className={styles.topbar}>
         <div className={styles.topTitle}>{influencer?.name ?? ""}</div>
       </header>
 
-      {/* 커버 이미지 */}
-      {post.cover_image_url ? (
+      {coverSrc ? (
         <div className={styles.cover}>
-          <Image
-            src={post.cover_image_url}
-            alt={post.title ?? ""}
-            fill
-            sizes="100vw"
-            className={styles.coverImg}
-          />
+          <Image src={coverSrc} alt={post.title ?? ""} fill sizes="100vw" className={styles.coverImg} />
         </div>
       ) : null}
 
-      {/* created_at 표시 제거(렌더 안 함) */}
-
-      {/* 본문 텍스트 */}
+      {post.title ? <h1 className={styles.title}>{post.title}</h1> : null}
       {post.body ? <div className={styles.body}>{post.body}</div> : null}
 
-      {/* 착용 제품 리스트 - 모던 카드형 */}
       {products.length > 0 && (
         <section className={styles.products}>
           <h2 className={styles.sectionTitle}>착용 제품</h2>
@@ -102,21 +93,14 @@ export default async function Page({ params }: { params: { id: string } }) {
               return (
                 <li key={idx} className={styles.prodItem}>
                   <div className={styles.num}>{idx + 1}</div>
-
                   <div className={styles.prodMeta}>
                     <div className={styles.prodLine}>
                       {brand && <span className={styles.brand}>{brand}</span>}
                       {(brand && name) && <span className={styles.dot}>|</span>}
                       {name && <span className={styles.prodName}>{name}</span>}
                     </div>
-
                     {hasLink && (
-                      <a
-                        href={link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`${feedStyles.linkBtn} ${styles.prodLink}`} // ✅ 크기 살짝 다운
-                      >
+                      <a href={link} target="_blank" rel="noopener noreferrer" className={`${feedStyles.linkBtn} ${styles.prodLink}`}>
                         제품 더 알아보기
                       </a>
                     )}
