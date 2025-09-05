@@ -34,6 +34,18 @@ function sanitizeFileName(name: string) {
   return `${safeBase || 'file'}.${safeExt || 'dat'}`;
 }
 const makeCoverPath = (fileName: string) => `covers/${Date.now()}-${sanitizeFileName(fileName)}`;
+const makeInfluencerCoverPath = (influencerId: string, fileName: string) =>
+  `covers/influencers/${influencerId}/${Date.now()}-${sanitizeFileName(fileName)}`;
+
+function normalizeHandle(input: string) {
+  let v = input.trim();
+  v = v.replace(/^@/, '');
+  v = v.replace(/^https?:\/\/(www\.)?instagram\.com\//i, '');
+  v = v.replace(/^instagram\.com\//i, '');
+  v = v.replace(/[/?#].*$/, '');
+  v = v.replace(/\s+/g, '');
+  return v.toLowerCase();
+}
 
 export default function ManagePage() {
   const supabase = useMemo(() => createClientComponentClient(), []);
@@ -45,7 +57,17 @@ export default function ManagePage() {
   const [influencerId, setInfluencerId] = useState<string>('');
   const [posts, setPosts] = useState<PostCard[]>([]);
 
-  // 편집 모달
+  // --- 프로필 편집 상태 ---
+  const [profileName, setProfileName] = useState('');
+  const [profileSlug, setProfileSlug] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  // 커버 업로드
+  const [profileCoverPreview, setProfileCoverPreview] = useState<string | null>(null);
+  const [profileUploading, setProfileUploading] = useState(false);
+  const [profileUploadHint, setProfileUploadHint] = useState<string | null>(null);
+
+  // 편집 모달 (기존 포스트 편집)
   const [editOpen, setEditOpen] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [editPostId, setEditPostId] = useState('');
@@ -80,13 +102,18 @@ export default function ManagePage() {
         // influencer
         const { data: inf, error: e1 } = await supabase
           .from('influencers')
-          .select('id')
+          .select('*')
           .eq('slug', params.slug)
           .maybeSingle();
         if (e1) throw e1;
         if (!inf) throw new Error('인플루언서를 찾을 수 없습니다.');
         const infId = String(inf.id);
         setInfluencerId(infId);
+        setProfileName((inf.name as string) ?? '');
+        setProfileSlug((inf.slug as string) ?? '');
+        setProfileCoverPreview(
+  (inf as any)?.cover_image_url || (inf as any)?.avatar_url || null
+);
 
         // 권한
         const { data: u } = await supabase.auth.getUser();
@@ -125,10 +152,109 @@ export default function ManagePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.slug]);
 
+  // --- 프로필 저장(이름/인스타그램 핸들) ---
+  const saveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalName = (profileName || '').trim();
+    const finalSlug = normalizeHandle(profileSlug);
+
+    if (!finalName) return alert('이름을 입력해 주세요.');
+    if (!finalSlug) return alert('인스타그램 핸들을 입력해 주세요.');
+    if (!/^[a-z0-9._]+$/.test(finalSlug)) {
+      return alert('인스타그램 핸들은 영문/숫자/._ 만 사용할 수 있어요.');
+    }
+
+    setProfileSaving(true);
+    setMsg('');
+    try {
+      // slug 중복 검사(현재 slug와 다를 때만)
+      if (finalSlug !== params.slug) {
+        const { data: dup } = await supabase
+          .from('influencers')
+          .select('id')
+          .eq('slug', finalSlug)
+          .maybeSingle();
+        if (dup?.id) throw new Error('이미 사용 중인 인스타그램 핸들이에요.');
+      }
+
+      const { error: e1 } = await supabase
+        .from('influencers')
+        .update({ name: finalName, slug: finalSlug })
+        .eq('id', influencerId);
+
+      if (e1) throw e1;
+
+      // slug가 바뀌면 라우팅 갱신
+      if (finalSlug !== params.slug) {
+        router.push(`/i/${finalSlug}/manage`);
+      } else {
+        router.refresh();
+      }
+      setMsg('프로필이 저장되었습니다.');
+    } catch (err: any) {
+      setMsg(`프로필 저장 실패: ${err?.message ?? err}`);
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  // --- 커버 이미지 업로드(없으면 avatar_url로 폴백) ---
+  const onPickProfileCover = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.currentTarget.files?.[0];
+    if (!file) return;
+    setProfileUploading(true);
+    setProfileUploadHint(null);
+    try {
+      const key = makeInfluencerCoverPath(influencerId, file.name);
+      const { error: upErr } = await supabase.storage
+        .from('covers')
+        .upload(key, file, {
+          cacheControl: '3600',
+          upsert: true,
+          contentType: file.type || 'image/jpeg',
+        });
+      if (upErr) throw upErr;
+
+      const { data: pub } = await supabase.storage.from('covers').getPublicUrl(key);
+      const url = pub?.publicUrl;
+      if (!url) throw new Error('퍼블릭 URL 생성 실패');
+
+      try {
+        const { error: e1 } = await supabase
+          .from('influencers')
+          .update({ cover_image_url: url as any })
+          .eq('id', influencerId);
+        if (e1) throw e1;
+        setProfileUploadHint('커버 이미지가 업데이트되었습니다.');
+        setProfileCoverPreview(url);
+      } catch (err: any) {
+        // 42703: column does not exist → avatar_url로 폴백
+        if (String(err?.code) === '42703' || /column .* does not exist/i.test(String(err?.message))) {
+          const { error: e2 } = await supabase
+            .from('influencers')
+            .update({ avatar_url: url as any })
+            .eq('id', influencerId);
+          if (e2) throw e2;
+          setProfileUploadHint('cover_image_url 컬럼이 없어 프로필 이미지(avatar)로 저장했습니다.');
+          setProfileCoverPreview(url);
+        } else {
+          throw err;
+        }
+      }
+      router.refresh();
+    } catch (err: any) {
+      setMsg(`커버 업로드 실패: ${err?.message ?? err}`);
+    } finally {
+      setProfileUploading(false);
+      e.currentTarget.value = '';
+    }
+  };
+
+  // --- 기존 포스트 편집 로직 그대로 ---
   const openEdit = async (postId: string) => {
     setMsg('');
-    setEditOpen(true);            // 🔑 먼저 오픈
-    setEditLoading(true);         // 로딩 스피너용
+    setEditOpen(true);
+    setEditLoading(true);
     setEditPostId(postId);
     setEditTitle('');
     setEditPublished(false);
@@ -170,7 +296,6 @@ export default function ManagePage() {
         }));
       setEditProducts(exist);
       setOrigProductIds(exist.map((p) => p.id!).filter(Boolean) as string[]);
-      // 시야에 들어오도록
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e: any) {
       setMsg(`편집 데이터 로드 실패: ${e?.message ?? e}`);
@@ -275,6 +400,63 @@ export default function ManagePage() {
 
       {msg && <div className={styles.alert}>{msg}</div>}
 
+      {/* ───────── 프로필 관리 섹션 ───────── */}
+      <section className={styles.fieldset} style={{ marginBottom: 18 }}>
+        <div className={styles.fieldsetTitle}>프로필 관리</div>
+
+        <form onSubmit={saveProfile} className={styles.form} style={{ display: 'grid', gap: 12 }}>
+          <label className={styles.label} style={{ display: 'grid', gap: 6 }}>
+            <span>이름</span>
+            <small style={{ color: '#888' }}>*이름은 메인페이지 상단에 노출됩니다.</small>
+            <input
+              className={styles.input}
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              placeholder="예: 수지"
+            />
+          </label>
+
+          <label className={styles.label} style={{ display: 'grid', gap: 6 }}>
+            <span>인스타그램</span>
+            <input
+              className={styles.input}
+              value={profileSlug}
+              onChange={(e) => setProfileSlug(e.target.value)}
+              placeholder="예: @name 이라면 name만 입력해주세요."
+            />
+          </label>
+
+          <div className={styles.rowRight}>
+            <button type="submit" className={`${styles.btn} ${styles.btnPrimary}`} disabled={profileSaving}>
+              {profileSaving ? '저장 중…' : '저장'}
+            </button>
+          </div>
+        </form>
+
+        <div className={styles.label} style={{ marginTop: 10 }}>
+          <div className={styles.fieldsetTitle}>커버 이미지</div>
+          {profileCoverPreview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={profileCoverPreview}
+              alt="cover"
+              style={{ width: 200, height: 120, borderRadius: 12, objectFit: 'cover', background: '#eee' }}
+            />
+          ) : (
+            <div className={styles.hint}>현재 커버 없음</div>
+          )}
+          <input
+            className={styles.input}
+            type="file"
+            accept="image/*"
+            onChange={onPickProfileCover}
+            disabled={profileUploading}
+          />
+          {profileUploadHint && <div className={styles.hint} style={{ color: '#118' }}>{profileUploadHint}</div>}
+        </div>
+      </section>
+
+      {/* ───────── 포스트 목록/편집 ───────── */}
       {loading ? (
         <div className={styles.hint}>불러오는 중… ⏳</div>
       ) : posts.length === 0 ? (

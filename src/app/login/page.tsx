@@ -1,81 +1,77 @@
 // src/app/login/page.tsx
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 export default function LoginPage() {
-  const supabase = createClientComponentClient();
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [pw, setPw] = useState('');
-  const [msg, setMsg] = useState<string>('');
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/";
+  const supabase = useMemo(() => createClientComponentClient(), []);
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
 
-  const signUp = async () => {
-    setMsg('');
-    try {
-      if (!email || !pw) return setMsg('이메일/비밀번호를 입력해 주세요.');
-      const { error } = await supabase.auth.signUp({ email, password: pw });
-      if (error) throw error;
-      setMsg('회원가입 완료! 곧바로 로그인 버튼을 눌러주세요.');
-    } catch (e: any) {
-      setMsg(`회원가입 실패: ${e?.message ?? e}`);
-    }
-  };
+  // 이미 로그인된 경우: 콜백 라우트로 보내서 후속 라우팅(/admin, /i/[slug], /onboarding) 재사용
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        window.location.href = `/auth/callback?next=${encodeURIComponent(next)}`;
+      }
+    });
+  }, [supabase, next]);
 
-  const signIn = async () => {
-    setMsg('');
+  const signInWithEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSending(true);
     try {
-      if (!email || !pw) return setMsg('이메일/비밀번호를 입력해 주세요.');
-      const { error } = await supabase.auth.signInWithPassword({ email, password: pw });
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        },
+      });
       if (error) throw error;
-      setMsg('로그인 성공! 잠시 후 이동합니다…');
-      router.replace('/'); // 필요하면 '/i/su.zzzy_/' 등으로 바꿔도 됨
-    } catch (e: any) {
-      setMsg(`로그인 실패: ${e?.message ?? e}`);
+      // ✅ 요청하신 문구로 변경
+      alert("Supabase를 통해 로그인 링크를 메일로 보내드렸어요!");
+    } catch (err: any) {
+      alert(err?.message || "이메일 전송에 실패했어요.");
+    } finally {
+      setSending(false);
     }
   };
 
   return (
-    <main style={{ maxWidth: 420, margin: '40px auto', padding: 16 }}>
-      <h1 style={{ fontWeight: 700, fontSize: 20, marginBottom: 16 }}>Login</h1>
+    <main style={{ maxWidth: 420, margin: "48px auto", padding: 16 }}>
+      <h1 style={{ fontWeight: 700, fontSize: 24, marginBottom: 16 }}>
+        인플루언서 로그인 / 회원가입
+      </h1>
+      <p style={{ color: "#666", marginBottom: 24 }}>
+        이메일을 입력하시면, 받은 메일의 링크로 간편하게 로그인할 수 있어요.
+      </p>
 
-      <label style={{ display: 'grid', gap: 6, marginBottom: 12 }}>
-        <span style={{ fontSize: 13 }}>Email</span>
+      {/* GitHub 로그인 UI는 요청대로 제거했습니다 */}
+
+      <form onSubmit={signInWithEmail} style={{ display: "grid", gap: 8 }}>
         <input
+          type="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => setEmail(e.currentTarget.value)}
           placeholder="you@example.com"
-          style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd' }}
+          required
+          style={{
+            padding: "10px 12px",
+            border: "1px solid #ddd",
+            borderRadius: 8,
+          }}
         />
-      </label>
-
-      <label style={{ display: 'grid', gap: 6, marginBottom: 16 }}>
-        <span style={{ fontSize: 13 }}>Password</span>
-        <input
-          type="password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          placeholder="••••••••"
-          style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd' }}
-        />
-      </label>
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={signIn} style={{ padding: '10px 14px', borderRadius: 999, border: '1px solid #0b69ff', background: '#0b69ff', color: '#fff' }}>
-          로그인
+        <button className="tab-btn" type="submit" disabled={sending}>
+          {sending ? "전송 중…" : "이메일로 로그인 링크 받기"}
         </button>
-        <button onClick={signUp} style={{ padding: '10px 14px', borderRadius: 999, border: '1px solid #ddd', background: '#fff' }}>
-          (개발용) 회원가입
-        </button>
-      </div>
+      </form>
 
-      {msg && <p style={{ marginTop: 12, color: '#444' }}>{msg}</p>}
-
-      <p style={{ marginTop: 16, fontSize: 12, color: '#777' }}>
-        * 테스트용으로 이메일/비번 회원가입 → 같은 계정으로 로그인.  
-        * memberships에 등록한 이메일과 동일해야 권한이 적용돼요.
+      <p style={{ fontSize: 12, color: "#888", marginTop: 16 }}>
+        계속하면 약관 및 개인정보 처리방침에 동의하게 됩니다.
       </p>
     </main>
   );

@@ -5,6 +5,7 @@ import "./globals.css";
 
 import HeaderGate from "@/components/HeaderGate";
 import Header from "@/components/Header";
+import SearchModalProvider from "@/components/SearchModalProvider"; // ⬅️ 추가
 
 export const metadata: Metadata = {
   title: "CREATOR.SHOP",
@@ -14,7 +15,6 @@ export const metadata: Metadata = {
 const pretendard = localFont({
   src: [
     {
-      // ⬇️ 파일 시스템 상대 경로 (layout.tsx 기준)
       path: "../../public/fonts/pretendard/PretendardVariable.woff2",
       weight: "45 920",
       style: "normal",
@@ -32,13 +32,16 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
-        {/* 모바일 디스플레이 폭에 딱 맞추는 핵심 설정 */}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className={pretendard.variable}>
         <HeaderGate>
           <Header />
         </HeaderGate>
+
+        {/* ⬇️ 모든 페이지에서 검색 모달이 동작하게 전역 장착 */}
+        <SearchModalProvider />
+
         {children}
       </body>
     </html>

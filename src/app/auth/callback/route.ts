@@ -5,7 +5,6 @@ import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
 import type { Database } from "@/types/database.types";
 
 type Role = "owner" | "editor" | "viewer";
-
 type MemRow = {
   influencer_id: string;
   role: Role | string | null;
@@ -16,7 +15,7 @@ type MemRow = {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const nextParam = url.searchParams.get("next");
+  const nextParam = url.searchParams.get("next") || "/";
 
   const supabase = createRouteHandlerClient<Database>({ cookies });
 
@@ -24,37 +23,33 @@ export async function GET(request: Request) {
     await supabase.auth.exchangeCodeForSession(code);
   }
 
-  if (nextParam) {
-    return NextResponse.redirect(new URL(nextParam, url.origin));
-  }
-
+  // 세션
   const { data: { session } } = await supabase.auth.getSession();
   const uid = session?.user?.id;
+  if (!uid) return NextResponse.redirect(new URL("/", url.origin));
 
-  if (!uid) {
-    return NextResponse.redirect(new URL("/", url.origin));
-  }
-
-  // admin이면 /admin 으로
+  // admin이면 /admin
   const meta: any = session.user.app_metadata || {};
-  const isAdminMeta =
-    meta?.is_admin === true ||
-    (Array.isArray(meta?.roles) && meta.roles.includes("admin"));
+  const isAdmin =
+    meta?.is_admin === true || (Array.isArray(meta?.roles) && meta.roles.includes("admin"));
+  if (isAdmin) return NextResponse.redirect(new URL("/admin", url.origin));
 
-  if (isAdminMeta) {
-    return NextResponse.redirect(new URL("/admin", url.origin));
-  }
-
-  // 멤버십 조회 → slug 우선순위 선택
+  // 내 멤버십 확인
   const { data: mems, error } = await supabase
     .from("memberships")
     .select("influencer_id, role, influencers ( slug )")
     .eq("user_id", uid);
 
-  if (error || !mems || mems.length === 0) {
-    return NextResponse.redirect(new URL("/", url.origin));
+  if (error) return NextResponse.redirect(new URL("/", url.origin));
+
+  if (!mems || mems.length === 0) {
+    // 첫 로그인: 온보딩으로 (next는 보존)
+    const to = new URL("/onboarding", url.origin);
+    to.searchParams.set("next", nextParam);
+    return NextResponse.redirect(to);
   }
 
+  // 우선순위: owner > editor > viewer
   const rows = mems as unknown as MemRow[];
   const prio: Record<Role, number> = { owner: 3, editor: 2, viewer: 1 };
   rows.sort((a, b) => {
@@ -66,8 +61,9 @@ export async function GET(request: Request) {
     return tb - ta;
   });
 
-  const picked: MemRow | undefined = rows.find((m) => m?.influencers?.slug) ?? rows[0];
-  const slug: string | null = picked?.influencers?.slug ?? null;
+  const slug = rows.find((m) => m?.influencers?.slug)?.influencers?.slug ?? null;
+  if (slug) return NextResponse.redirect(new URL(`/i/${slug}`, url.origin));
 
-  return NextResponse.redirect(new URL(slug ? `/i/${slug}` : "/", url.origin));
+  // slug가 없으면 next로
+  return NextResponse.redirect(new URL(nextParam, url.origin));
 }
