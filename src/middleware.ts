@@ -1,11 +1,14 @@
+// src/middleware.ts
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
+import type { Database } from "@/types/database.types";
 
 const REALM = "Mewe Admin"; // 브라우저 Basic Auth 캐시 구분용
 
 function decodeBase64(b64: string): string {
   try {
-    // Edge 런타임(브라우저 유사)
+    // Edge 런타임(Web API)
     // @ts-ignore
     return atob(b64);
   } catch {
@@ -19,7 +22,10 @@ function decodeBase64(b64: string): string {
   }
 }
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
+  // ────────────────────────────────────────────────────────────────
+  // 0) Basic Auth (기존 로직 유지: ENV 미설정 시 500)
+  // ────────────────────────────────────────────────────────────────
   const user = process.env.ADMIN_USER || "";
   const pass = process.env.ADMIN_PASS || "";
 
@@ -58,8 +64,46 @@ export function middleware(req: NextRequest) {
     });
   }
 
-  // 통과
-  return NextResponse.next();
+  // ────────────────────────────────────────────────────────────────
+  // 1) Supabase 세션 기반 Admin 판별
+  // ────────────────────────────────────────────────────────────────
+  const res = NextResponse.next();
+  const supabase = createMiddlewareClient<Database>({ req, res });
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  // 로그인 안 되어 있으면 홈으로
+  if (!session) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
+  // app_metadata 또는 admins 테이블로 admin 판별
+  const meta: any = session.user.app_metadata || {};
+  const isAdminMeta =
+    meta?.is_admin === true ||
+    (Array.isArray(meta?.roles) && meta.roles.includes("admin"));
+
+  let isAdmin = !!isAdminMeta;
+
+  if (!isAdmin) {
+    // (선택) DB 테이블 확인: admins(user_id uuid primary key)
+    const { data: adminRow } = await supabase
+      .from("admins")
+      .select("user_id")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    isAdmin = !!adminRow;
+  }
+
+  if (!isAdmin) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
+  // ✅ 통과
+  return res;
 }
 
 // /admin 루트와 모든 하위 경로 적용

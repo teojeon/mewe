@@ -31,6 +31,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
+      <head>
+        {/* 모바일 디스플레이 폭에 딱 맞추는 핵심 설정 */}
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body className={pretendard.variable}>
         <HeaderGate>
           <Header />

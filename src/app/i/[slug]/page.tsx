@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import styles from '@/styles/feed.module.css';
+import InfluencerQuickActions from "@/components/InfluencerQuickActions";
 
 export const dynamic = 'force-dynamic';
 
@@ -45,7 +46,6 @@ async function getViewerRoleForInfluencer(
   if (role === 'viewer') return 'viewer';
   return 'none';
 }
-
 
 export default async function Page({ params }: { params: { slug: string } }) {
   const supabase = createServerComponentClient({ cookies });
@@ -152,24 +152,16 @@ export default async function Page({ params }: { params: { slug: string } }) {
           <div className={styles.profileTitle}>{influencer.name ?? ''}</div>
           <p className={styles.profileHandle}>@{influencer.slug ?? '—'}</p>
         </div>
-
-        {/* 우측: 빠른 액션 */}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          {hasSession ? (
-            role === 'owner' || role === 'editor' ? (
-              <>
-                <Link href={`/post/new?author=${influencer.id}`} className={styles.linkBtn}>
-                  새 글
-                </Link>
-                <Link href={`/i/${influencer.slug}/manage`} className={styles.linkBtn}>
-                  관리
-                </Link>
-              </>
-            ) : null
-          ) : (
-            <Link href="/login" className={styles.linkBtn}>로그인</Link>
-          )}
+        {/* 우측: 빠른 액션 (클라이언트 전용, 하이드레이션 안정) */}
+          <div style={{ marginLeft: 'auto' }}>
+            <InfluencerQuickActions
+            influencerId={influencer.id}
+            slug={influencer.slug ?? ""}
+            containerClassName=""
+          />
         </div>
+
+
       </section>
 
       {/* 링크 카드 */}

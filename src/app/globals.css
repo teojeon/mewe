@@ -31,7 +31,22 @@ html, body {
                Apple SD Gothic Neo, "Noto Sans KR", "Malgun Gothic", Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  max-width: 100%;
+  overflow-x: hidden;      /* 우측 1~2px 뜨는 현상 방지 */
 }
+
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+main, section {
+  /* 레이아웃/비율 그대로 두되, 뷰포트 폭 이상 안 튀게 */
+  max-width: 100vw;
+  box-sizing: border-box;
+}
+
+
 
 /* ====== 앱 컨테이너 ====== */
 #app-root{
@@ -173,3 +188,17 @@ html, body {
     inset: 0;
   }
 }
+
+/* 링크처럼 안 보이게 (밑줄/색/포인터 제거) */
+.app-header .brand {
+  text-decoration: none;
+  color: inherit;
+  cursor: default;            /* 마우스 손가락 대신 기본 포인터 */
+}
+.app-header .brand:hover,
+.app-header .brand:focus {
+  text-decoration: none;      /* 호버/포커스 시에도 밑줄 X */
+  color: inherit;
+  outline: none;
+}
+
