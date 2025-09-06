@@ -154,18 +154,16 @@ export default async function Page({ params }: { params: { slug: string } }) {
           <div className={styles.profileTitle}>{influencer.name ?? ''}</div>
           <p className={styles.profileHandle}>@{influencer.slug ?? '—'}</p>
         </div>
-        {/* 우측: 빠른 액션 (클라이언트 전용, 하이드레이션 안정) */}
-          <div style={{ marginLeft: 'auto' }}>
-            <InfluencerQuickActions
-            influencerId={influencer.id}
-            slug={influencer.slug ?? ""}
-            containerClassName=""
-          />
-        </div>
-
 
       </section>
-
+{/* 빠른 액션: 새 글 / 관리 (모바일 2열 가로 가득) */}
+<section className={styles.quickActionsWrap}>
+  <InfluencerQuickActions
+    influencerId={influencer.id}
+    slug={influencer.slug ?? ""}
+    containerClassName={styles.quickActionsBar}
+  />
+</section>
       {/* 링크 카드 */}
       <section className={styles.linksCard}>
         <div className={styles.linksRow}>
@@ -177,13 +175,15 @@ export default async function Page({ params }: { params: { slug: string } }) {
                   : (typeof lnk?.url === 'string' ? lnk.url : '');
                 const url = typeof lnk?.url === 'string' ? lnk.url : '';
                 if (!url) return null;
+                // http/https 미지정 시 https로 보정, //로 시작하면 https: 붙이기
+                const nurl = /^(https?:)?\/\//i.test(url) ? (url.startsWith('//') ? `https:${url}` : url) : `https://${url}`;
                 return (
-                  <li key={i}>
-                    <a className={styles.linkBtn} href={url} target="_blank" rel="noopener noreferrer">
-                      {text}
-                    </a>
-                  </li>
-                );
+                    <li key={i}>
+                      <a className={styles.linkBtn} href={nurl} target="_blank" rel="noopener noreferrer">
+                         {text}
+                          </a>
+                          </li>
+                    );
               })
             ) : (
               <li className={styles.linksEmpty}>등록된 링크가 없습니다.</li>

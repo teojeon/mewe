@@ -75,7 +75,7 @@ export default function InfluencerQuickActions({
 
   if (role === "owner" || role === "editor") {
     return (
-      <div className={containerClassName} style={{ display: "flex", gap: 8 }}>
+      <div className={containerClassName}>
         <Link href={`/post/new?author=${influencerId}`} className={styles.linkBtn}>
           새 글
         </Link>
