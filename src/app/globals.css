@@ -4,6 +4,10 @@
   --radius: 12px;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 
 /* ====== CSS 변수 & 리셋 ====== */
 :root{

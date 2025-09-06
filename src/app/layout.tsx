@@ -1,5 +1,6 @@
 // src/app/layout.tsx
 import type { Metadata } from "next";
+import type { Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
@@ -11,6 +12,13 @@ import PageFade from "@/components/PageFade";
 export const metadata: Metadata = {
   title: "CREATOR.SHOP",
   description: "Influencer catalog",
+};
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  // 필요 시 확대 고정까지 원하면 주석 해제:
+  // maximumScale: 1,
 };
 
 const pretendard = localFont({

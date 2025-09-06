@@ -183,7 +183,10 @@ export default function NewPostPage() {
     }
 
     // 5) 성공
-    router.replace(`/post/${newPostId}/edit`);
+    // 5) 성공
+setMsg('새 글이 생성되었습니다!');
+try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
+
   } catch (e: any) {
     setMsg(`생성 실패: ${e?.message ?? e}`);
   } finally {
