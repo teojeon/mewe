@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
+import BackButton from '@/components/BackButton';
 
 import { deletePost } from './actions'; // ✅ 서버 액션
 import styles from '@/styles/post.module.css';
@@ -186,6 +187,24 @@ export default async function Page({ params }: { params: { id: string } }) {
           <div className={styles.topTitle}>@</div>
         )}
 
+
+  {/* 우측: 뒤로가기 + (권한 있을 때만 편집/삭제) */}
+  <div className={styles.actionsRow}>
+    <BackButton fallback={topSlug ? `/i/${topSlug}` : '/'} />
+    {canEdit && (
+      <>
+        <Link href={`/post/${vm.id}/edit`} className={styles.actionBtn} prefetch>
+          편집
+        </Link>
+        <form action={deletePost.bind(null, vm.id, topSlug ? `/i/${topSlug}` : '/') }>
+          <button type="submit" className={`${styles.actionBtn} ${styles.danger}`}>
+            삭제
+          </button>
+        </form>
+      </>
+    )}
+  </div>
+
         {/* 권한자만 노출 */}
         {canEdit && (
           <div className={styles.actionsRow}>
@@ -246,9 +265,7 @@ export default async function Page({ params }: { params: { id: string } }) {
 
               return (
                 <li key={idx} className={styles.prodItem}>
-                  <div className={styles.num}>{idx + 1}</div>
-
-                  <div className={styles.prodMeta}>
+                    <div className={styles.prodMeta}>
                     <div className={styles.prodLine}>
                       {brand && <span className={styles.brand}>{brand}</span>}
                       {brand && name && <span className={styles.dot}>|</span>}

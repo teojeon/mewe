@@ -102,12 +102,12 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .prodItem {
   display: grid;
-  grid-template-columns: 32px 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
   align-items: start;
   background: #fff;
@@ -120,6 +120,7 @@
 }
 
 .num {
+  display: none;
   width: 28px;
   height: 28px;
   border-radius: 999px;
