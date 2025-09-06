@@ -5,7 +5,8 @@ import "./globals.css";
 
 import HeaderGate from "@/components/HeaderGate";
 import Header from "@/components/Header";
-import SearchModalProvider from "@/components/SearchModalProvider"; // ⬅️ 추가
+import SearchModalProvider from "@/components/SearchModalProvider";
+import PageFade from "@/components/PageFade";
 
 export const metadata: Metadata = {
   title: "CREATOR.SHOP",
@@ -42,7 +43,7 @@ export default function RootLayout({
         {/* ⬇️ 모든 페이지에서 검색 모달이 동작하게 전역 장착 */}
         <SearchModalProvider />
 
-        {children}
+        <PageFade>{children}</PageFade>
       </body>
     </html>
   );

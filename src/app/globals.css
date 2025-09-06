@@ -214,3 +214,13 @@ main, section {
   outline: none;
 }
 
+@keyframes pageFade { from { opacity: 0; } to { opacity: 1; } }
+.page-fade { animation: pageFade 160ms ease-out; will-change: opacity; }
+@media (prefers-reduced-motion: reduce) { .page-fade { animation: none !important; } }
+
+/* ==== Brand logo sizing (replaces text 'mewe') ==== */
+.brand-logo { height: 24px; width: auto; display: block; }
+@media (max-width: 420px){
+  .brand-logo { height: 22px; }
+}
+/* 링크 외형 중립화는 기존 .app-header .brand 규칙이 유지합니다 */

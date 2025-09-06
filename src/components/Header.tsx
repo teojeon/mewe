@@ -3,6 +3,8 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
+import logo from "../../public/logo.png";
 import LogoutButton from "@/components/LogoutButton";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
@@ -41,7 +43,7 @@ export default function Header() {
     <header className="app-header" role="banner" aria-label="상단 헤더">
       {/* 좌측: mewe 텍스트(링크처럼 보이지 않게 – 기존 스타일 유지) */}
       <Link href="/" aria-label="홈으로" className="brand">
-        <strong style={{ fontWeight: 700, userSelect: "none", cursor: "default" }}>mewe</strong>
+          <Image src={logo} alt="mewe" className="brand-logo" priority />
       </Link>
 
       {/* 우측: 검색 + (로그인/로그아웃) */}
