@@ -1,18 +1,16 @@
 // src/middleware.ts
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs";
-import type { Database } from "@/types/database.types";
 
-const REALM = "Mewe Admin"; // 브라우저 Basic Auth 캐시 구분용
+const REALM = "Mewe Admin";
 
 function decodeBase64(b64: string): string {
   try {
-    // Edge 런타임(Web API)
+    // Edge 런타임
     // @ts-ignore
     return atob(b64);
   } catch {
-    // 로컬 dev(Node) 호환
+    // Node 호환
     // @ts-ignore
     if (typeof Buffer !== "undefined") {
       // @ts-ignore
@@ -22,14 +20,17 @@ function decodeBase64(b64: string): string {
   }
 }
 
-export async function middleware(req: NextRequest) {
-  // ────────────────────────────────────────────────────────────────
-  // 0) Basic Auth (기존 로직 유지: ENV 미설정 시 500)
-  // ────────────────────────────────────────────────────────────────
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // /admin에만 Basic Auth 적용
+  if (!pathname.startsWith("/admin")) {
+    return NextResponse.next();
+  }
+
   const user = process.env.ADMIN_USER || "";
   const pass = process.env.ADMIN_PASS || "";
 
-  // 환경변수 빠지면 실수로 공개되는 걸 막기 위해 500
   if (!user || !pass) {
     return new NextResponse("Admin auth is not configured.", { status: 500 });
   }
@@ -37,7 +38,6 @@ export async function middleware(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const match = /^Basic\s+(.+)$/i.exec(authHeader);
 
-  // 인증 헤더 없으면 로그인 요구
   if (!match) {
     return new NextResponse("Authentication required.", {
       status: 401,
@@ -45,7 +45,6 @@ export async function middleware(req: NextRequest) {
     });
   }
 
-  // "username:password" 디코딩
   let decoded = "";
   try {
     decoded = decodeBase64(match[1]);
@@ -64,47 +63,9 @@ export async function middleware(req: NextRequest) {
     });
   }
 
-  // ────────────────────────────────────────────────────────────────
-  // 1) Supabase 세션 기반 Admin 판별
-  // ────────────────────────────────────────────────────────────────
-  const res = NextResponse.next();
-  const supabase = createMiddlewareClient<Database>({ req, res });
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  // 로그인 안 되어 있으면 홈으로
-  if (!session) {
-    return NextResponse.redirect(new URL("/", req.url));
-  }
-
-  // app_metadata 또는 admins 테이블로 admin 판별
-  const meta: any = session.user.app_metadata || {};
-  const isAdminMeta =
-    meta?.is_admin === true ||
-    (Array.isArray(meta?.roles) && meta.roles.includes("admin"));
-
-  let isAdmin = !!isAdminMeta;
-
-  if (!isAdmin) {
-    // (선택) DB 테이블 확인: admins(user_id uuid primary key)
-    const { data: adminRow } = await supabase
-      .from("admins")
-      .select("user_id")
-      .eq("user_id", session.user.id)
-      .maybeSingle();
-
-    isAdmin = !!adminRow;
-  }
-
-  if (!isAdmin) {
-    return NextResponse.redirect(new URL("/", req.url));
-  }
-
-  // ✅ 통과
-  return res;
+  // 통과
+  return NextResponse.next();
 }
 
-// /admin 루트와 모든 하위 경로 적용
+// /admin 전체에만 미들웨어 적용
 export const config = { matcher: ["/admin", "/admin/:path*"] };

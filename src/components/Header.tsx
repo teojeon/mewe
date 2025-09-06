@@ -1,18 +1,45 @@
-// components/Header.tsx
+// src/components/Header.tsx
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
-import { LoginButton } from "@/components/LoginButton";
+import LogoutButton from "@/components/LogoutButton";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 export default function Header() {
+  const supabase = React.useMemo(() => createClientComponentClient(), []);
+  const [mounted, setMounted] = React.useState(false);
+  const [hasSession, setHasSession] = React.useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    let alive = true;
+
+    // 초기 세션 읽기
+    supabase.auth.getSession().then(({ data }) => {
+      if (!alive) return;
+      setHasSession(!!data.session);
+      setMounted(true);
+    });
+
+    // 세션 변경 구독
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!alive) return;
+      setHasSession(!!session);
+    });
+
+    return () => {
+      alive = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [supabase]);
+
   return (
     <header className="app-header" role="banner" aria-label="상단 헤더">
-      {/* ⬇︎ brand 클래스로 스타일 제어 */}
-      <Link href="/" aria-label="홈으로 이동" className="brand">
-        <strong style={{ fontWeight: 700 }}>mewe</strong>
-      </Link>
+      {/* 좌측: mewe 텍스트(링크처럼 보이지 않게 – 기존 스타일 유지) */}
+      <strong style={{ fontWeight: 700, userSelect: "none", cursor: "default" }}>mewe</strong>
 
-      <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+      {/* 우측: 검색 + (로그인/로그아웃) */}
+      <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
         <button
           className="tab-btn"
           aria-label="검색"
@@ -20,11 +47,21 @@ export default function Header() {
           onClick={() => (window as any).__openSearchModal?.()}
         >
           <svg className="icon-24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <circle cx="11" cy="11" r="7" strokeWidth="1.5"/>
-            <path d="M20 20l-3.2-3.2" strokeWidth="1.5"/>
+            <circle cx="11" cy="11" r="7" strokeWidth="1.5" />
+            <path d="M20 20l-3.2-3.2" strokeWidth="1.5" />
           </svg>
         </button>
-        <LoginButton />
+
+        {/* 세션 의존 UI: 마운트 후에만 렌더하여 하이드레이션 오류 회피 */}
+        {mounted ? (
+          hasSession ? (
+            <LogoutButton />
+          ) : (
+            <Link href="/login" className="tab-btn" aria-label="로그인">
+              로그인
+            </Link>
+          )
+        ) : null}
       </div>
     </header>
   );
