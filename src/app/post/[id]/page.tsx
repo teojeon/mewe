@@ -9,10 +9,11 @@ import BackButton from '@/components/BackButton';
 import { deletePost } from './actions'; // ✅ 서버 액션
 import styles from '@/styles/post.module.css';
 import feedStyles from '@/styles/feed.module.css'; // '제품 더 알아보기' 버튼 재사용
+import ProductTrackLink from "@/components/ProductTrackLink";
 
 export const dynamic = 'force-dynamic';
 
-type ProductMeta = { brand?: string; name?: string; link?: string };
+type ProductMeta = { id?: string; brand?: string; name?: string; link?: string };
 type InfluencerVM = { id: string; name: string | null; slug: string | null };
 
 type PostVM = {
@@ -42,7 +43,7 @@ async function fetchPostVM(postId: string): Promise<PostVM | null> {
         influencers ( id, name, slug )
       ),
       posts_products (
-        products ( brand, name, url )
+        products ( id, brand, name, url )
       )
     `.trim(),
     )
@@ -109,6 +110,7 @@ async function fetchPostVM(postId: string): Promise<PostVM | null> {
       .map((pp: any) => pp?.products ?? null)
       .filter(Boolean)
       .map((prod: any) => ({
+        id: prod?.id ? String(prod.id) : undefined,
         brand: typeof prod?.brand === 'string' ? prod.brand : undefined,
         name: typeof prod?.name === 'string' ? prod.name : undefined,
         link: typeof prod?.url === 'string' ? prod.url : undefined,
@@ -176,64 +178,38 @@ export default async function Page({ params }: { params: { id: string } }) {
     <main className={styles.wrap}>
       {/* 상단 바: 좌측 @slug, 우측 편집/삭제 */}
       <header className={`${styles.topbar} ${styles.topbarRow}`}>
-        {topSlug ? (
-          <Link
-            href={`/i/${topSlug}`}
-            className={`${styles.topTitle} ${styles.slugLink}`}
-          >
-            @{topSlug}
-          </Link>
-        ) : (
-          <div className={styles.topTitle}>@</div>
-        )}
-
+  {topSlug ? (
+    <Link
+      href={`/i/${topSlug}`}
+      className={`${styles.topTitle} ${styles.slugLink}`}
+    >
+      @{topSlug}
+    </Link>
+  ) : (
+    <div className={styles.topTitle}>@</div>
+  )}
 
   {/* 우측: 뒤로가기 + (권한 있을 때만 편집/삭제) */}
-  <div className={styles.actionsRow}>
-    <BackButton fallback={topSlug ? `/i/${topSlug}` : '/'} />
-    {canEdit && (
-      <>
-        <Link href={`/post/${vm.id}/edit`} className={styles.actionBtn} prefetch>
-          편집
-        </Link>
-        <form action={deletePost.bind(null, vm.id, topSlug ? `/i/${topSlug}` : '/') }>
-          <button type="submit" className={`${styles.actionBtn} ${styles.danger}`}>
-            삭제
-          </button>
-        </form>
-      </>
-    )}
-  </div>
+<div className={styles.actionsRow}>
+  <BackButton fallback={topSlug ? `/i/${topSlug}` : '/'} />
+  {canEdit && (
+    <>
+      <Link href={`/post/${vm.id}/edit`} className={styles.actionBtn} prefetch>
+        편집
+      </Link>
+      <form action={deletePost.bind(null, vm.id, topSlug ? `/i/${topSlug}` : '/') }>
+        <button type="submit" className={`${styles.actionBtn} ${styles.danger}`}>
+          삭제
+        </button>
+      </form>
+    </>
+  )}
+</div>
 
-        {/* 권한자만 노출 */}
-        {canEdit && (
-          <div className={styles.actionsRow}>
-            <Link
-              href={`/post/${vm.id}/edit`}
-              className={styles.actionBtn}
-              prefetch
-            >
-              편집
-            </Link>
 
-            {/* 삭제: 서버 액션에 postId, redirectTo 전달 */}
-            <form
-              action={deletePost.bind(
-                null,
-                vm.id,
-                topSlug ? `/i/${topSlug}` : '/',
-              )}
-            >
-              <button
-                type="submit"
-                className={`${styles.actionBtn} ${styles.danger}`}
-              >
-                삭제
-              </button>
-            </form>
-          </div>
-        )}
-      </header>
+  {/* 권한자만 노출 */}
+</header>
+
 
       {/* 커버 이미지 */}
       {vm.cover_image_url ? (
@@ -262,6 +238,7 @@ export default async function Page({ params }: { params: { id: string } }) {
               const name = p.name?.trim() ?? '';
               const link = p.link?.trim() ?? '';
               const hasLink = !!link;
+              const productId = link || (brand || name ? `${brand}|${name}` : String(idx));
 
               return (
                 <li key={idx} className={styles.prodItem}>
@@ -272,16 +249,20 @@ export default async function Page({ params }: { params: { id: string } }) {
                       {name && <span className={styles.prodName}>{name}</span>}
                     </div>
 
-                    {hasLink && (
-                      <a
-                        href={link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`${feedStyles.linkBtn} ${styles.prodLink}`}
-                      >
-                        제품 더 알아보기
-                      </a>
-                    )}
+                   {hasLink && (
+  <ProductTrackLink
+    href={link}
+    target="_blank"
+    rel="noopener noreferrer"
+    className={`${feedStyles.linkBtn} ${styles.prodLink}`}
+    postId={vm.id}
+    productId={link || (brand || name ? `${brand}|${name}` : String(idx))}
+    influencerSlug={topSlug}
+  >
+    제품 더 알아보기
+  </ProductTrackLink>
+)}
+
                   </div>
                 </li>
               );

@@ -47,6 +47,8 @@ async function getViewerRoleForInfluencer(
   return 'none';
 }
 
+import TrackInfluencerView from "@/components/TrackInfluencerView";
+
 export default async function Page({ params }: { params: { slug: string } }) {
   const supabase = createServerComponentClient({ cookies });
 

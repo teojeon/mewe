@@ -147,6 +147,9 @@ export default function AdminPage() {
                   <Link href={r.slug ? `/i/${r.slug}/manage` : "#"} className={`${styles.btn} ${styles.btnGhost}`}>
                     관리 페이지
                   </Link>
+                  <Link href={r.slug ? `/i/${r.slug}/dashboard` : "#"} className={`${styles.btn} ${styles.btnSecondary}`}>
+    대시보드
+  </Link>
                   <button
                     className={`${styles.btn} ${verified ? styles.btnGhost : styles.btnSecondary}`}
                     onClick={() => toggleVerify(r.id, !verified)}
@@ -154,6 +157,14 @@ export default function AdminPage() {
                   >
                     {verified ? "인증 해제" : "인증"}
                   </button>
+                   {/* ✅ 추가된 대시보드 버튼 */}
+
+  <button
+    className={`${styles.btn} ${verified ? styles.btnGhost : styles.btnSecondary}`}
+    onClick={() => toggleVerify(r.id, !verified)}
+  >
+    {verified ? "인증 해제" : "인증 처리"}
+  </button>
                 </div>
               </div>
             );
