@@ -12,12 +12,28 @@ export default function Header() {
   const [hasSession, setHasSession] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
-    let alive = true;
+    setMounted(true);
 
-    // ... (세션 확인 등 기존 로직 유지)
+    let alive = true;
+    const init = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!alive) return;
+        setHasSession(!!data.session);
+      } catch {
+        if (!alive) return;
+        setHasSession(false);
+      }
+    };
+    init();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setHasSession(!!session);
+    });
 
     return () => {
       alive = false;
+      sub.subscription?.unsubscribe?.();
     };
   }, [supabase]);
 
