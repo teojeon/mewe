@@ -83,14 +83,13 @@ export default function AdminPage() {
     <main className={styles.wrap}>
       <header className={styles.header}>
         <h1 className={styles.title}>Admin: 인플루언서 관리</h1>
-        <div className={styles.actions} style={{ display: "flex", gap: 8 }}>
+        <div className={styles.actions}>
           <input
             className={styles.input}
             placeholder="이름/슬러그 검색"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && load()}
-            style={{ minWidth: 220 }}
           />
           <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={load}>
             검색
@@ -108,25 +107,13 @@ export default function AdminPage() {
       ) : rows.length === 0 ? (
         <div className={styles.hint}>등록된 인플루언서가 없습니다.</div>
       ) : (
-        <section style={{ display: "grid", gap: 12 }}>
+        <section className={styles.list}>
           {rows.map((r) => {
             const verified = !!r.instagram_verified_at;
             return (
-              <div
-                key={r.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "auto 1fr auto",
-                  alignItems: "center",
-                  gap: 12,
-                  border: "1px solid rgba(0,0,0,0.08)",
-                  borderRadius: 12,
-                  padding: 12,
-                  background: "#fff",
-                }}
-              >
+              <div key={r.id} className={styles.card}>
                 {/* 아바타 */}
-                <div style={{ width: 48, height: 48, borderRadius: 10, overflow: "hidden", background: "#eee" }}>
+                <div className={styles.cardAvatar}>
                   {r.avatar_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={r.avatar_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -134,22 +121,22 @@ export default function AdminPage() {
                 </div>
 
                 {/* 정보 */}
-                <div style={{ display: "grid" }}>
-                  <div style={{ fontWeight: 600 }}>{r.name ?? "—"}</div>
-                  <div style={{ color: "#666" }}>
+                <div className={styles.cardBody}>
+                  <div className={styles.cardTitle}>{r.name ?? "—"}</div>
+                  <div className={styles.cardMeta}>
                     @{r.slug ?? "—"} &nbsp;·&nbsp; 상태:&nbsp;
                     {verified ? <b style={{ color: "green" }}>인증</b> : <b style={{ color: "#b00" }}>미인증</b>}
                   </div>
                 </div>
 
                 {/* 액션 */}
-                <div style={{ display: "flex", gap: 8 }}>
+                <div className={styles.cardActions}>
                   <Link href={r.slug ? `/i/${r.slug}/manage` : "#"} className={`${styles.btn} ${styles.btnGhost}`}>
                     관리 페이지
                   </Link>
                   <Link href={r.slug ? `/i/${r.slug}/dashboard` : "#"} className={`${styles.btn} ${styles.btnSecondary}`}>
-    대시보드
-  </Link>
+                    대시보드
+                  </Link>
                   <button
                     className={`${styles.btn} ${verified ? styles.btnGhost : styles.btnSecondary}`}
                     onClick={() => toggleVerify(r.id, !verified)}
@@ -157,14 +144,6 @@ export default function AdminPage() {
                   >
                     {verified ? "인증 해제" : "인증"}
                   </button>
-                   {/* ✅ 추가된 대시보드 버튼 */}
-
-  <button
-    className={`${styles.btn} ${verified ? styles.btnGhost : styles.btnSecondary}`}
-    onClick={() => toggleVerify(r.id, !verified)}
-  >
-    {verified ? "인증 해제" : "인증 처리"}
-  </button>
                 </div>
               </div>
             );

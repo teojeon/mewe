@@ -26,6 +26,52 @@
   flex-wrap: wrap;
 }
 
+.list {
+  display: grid;
+  gap: 12px;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+}
+
+.cardAvatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #eee;
+  justify-self: start;
+}
+
+.cardBody {
+  display: grid;
+  gap: 4px;
+}
+
+.cardTitle {
+  font-weight: 600;
+}
+
+.cardMeta {
+  color: #666;
+  font-size: 13px;
+}
+
+.cardActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 /* === Buttons: 넉넉한 텍스트 수용, 모던 pill === */
 .btn {
   display: inline-flex;
@@ -143,4 +189,42 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .wrap {
+    padding: 12px;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .actions {
+    width: 100%;
+    flex-wrap: nowrap;
+    flex-direction: column;
+  }
+
+  .actions > * {
+    width: 100%;
+  }
+
+  .card {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .cardAvatar {
+    width: 64px;
+    height: 64px;
+  }
+
+  .cardActions {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+  }
 }
