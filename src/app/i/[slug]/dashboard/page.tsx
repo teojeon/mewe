@@ -12,6 +12,7 @@ type ClickAgg = {
   name?: string | null;
   link?: string | null;
   post_title?: string | null;
+  post_cover_url?: string | null;
 };
 
 export const dynamic = "force-dynamic";
@@ -112,7 +113,7 @@ export default async function Dashboard({ params, searchParams }: { params: { sl
   if (postIds.length) {
     const { data: postRows } = await supabase
       .from("posts")
-      .select("id, title, meta")
+      .select("id, title, meta, cover_image_url")
       .in("id", postIds);
     (postRows || []).forEach((p: any) => postsById.set(String(p.id), p));
   }
@@ -129,7 +130,21 @@ export default async function Dashboard({ params, searchParams }: { params: { sl
         brand = b || null; name = n || null;
       }
     }
-    return { ...a, post_title: post?.title ?? null, brand, name, link };
+    const normalizedTitle =
+      typeof post?.title === "string" && post.title.trim().length > 0 ? post.title.trim() : null;
+    const normalizedCover =
+      typeof post?.cover_image_url === "string" && post.cover_image_url.trim().length > 0
+        ? post.cover_image_url
+        : null;
+
+    return {
+      ...a,
+      post_title: normalizedTitle,
+      post_cover_url: normalizedCover,
+      brand,
+      name,
+      link,
+    };
   });
 
   // 클릭수 정렬
@@ -138,74 +153,171 @@ export default async function Dashboard({ params, searchParams }: { params: { sl
   const totalViews = (daily || []).reduce((s, r: any) => s + (r.page_views || 0), 0);
   const totalClicks = (daily || []).reduce((s, r: any) => s + (r.product_clicks || 0), 0);
   const ctr = totalViews ? (totalClicks / totalViews) * 100 : 0;
+  const formatNumber = (value: number) => value.toLocaleString();
 
   return (
     <main className={styles.wrap}>
       <div className={styles.header}>
-        <h1>@{slug} 대시보드</h1>
-        <div style={{ display: "flex", gap: 8 }}>
+        <h1 className={styles.title}>@{slug} 대시보드</h1>
+        <div className={styles.filters}>
           <Link href={`/i/${slug}/dashboard?sort=desc`} className={`${styles.btn} ${styles.btnGhost}`}>클릭수 ⬇︎</Link>
           <Link href={`/i/${slug}/dashboard?sort=asc`} className={`${styles.btn} ${styles.btnGhost}`}>클릭수 ⬆︎</Link>
         </div>
       </div>
 
       {/* 기존 카드형 요약 (유지) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 12 }}>
-        <div className={styles.banner}>전체 방문수: <b>{totalViews}</b></div>
-        <div className={styles.banner}>제품 클릭수: <b>{totalClicks}</b></div>
-        <div className={styles.banner}>CTR: <b>{ctr.toFixed(1)}%</b></div>
-      </div>
-
-      {/* 일별 추이 (기존 유지) */}
-      <section style={{ marginTop: 8 }}>
-        <h3>최근 추이</h3>
-        <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 6px" }}>
-          <thead>
-            <tr style={{ textAlign: "left", fontSize: 13, color: "#666" }}>
-              <th>날짜</th><th>방문</th><th>제품 클릭</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(daily || []).map((r: any) => (
-              <tr key={String(r.day)} style={{ background: "#fff", border: "1px solid #eee" }}>
-                <td style={{ padding: "8px 10px" }}>{new Date(r.day).toLocaleDateString()}</td>
-                <td style={{ padding: "8px 10px" }}>{r.page_views}</td>
-                <td style={{ padding: "8px 10px" }}>{r.product_clicks}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <section className={styles.statGrid}>
+        <div className={styles.statCard}>
+          <span>전체 방문수</span>
+          <strong>{formatNumber(totalViews)}</strong>
+        </div>
+        <div className={styles.statCard}>
+          <span>제품 클릭수</span>
+          <strong>{formatNumber(totalClicks)}</strong>
+        </div>
+        <div className={styles.statCard}>
+          <span>CTR</span>
+          <strong>{ctr.toFixed(1)}%</strong>
+        </div>
       </section>
 
-      {/* 제품 클릭 상세 테이블 (신규) */}
-      <section style={{ marginTop: 16 }}>
-        <h3>제품 클릭 상세</h3>
-        <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 6px" }}>
-          <thead>
-            <tr style={{ textAlign: "left", fontSize: 13, color: "#666" }}>
-              <th style={{ width: "30%" }}>Post</th>
-              <th>브랜드</th>
-              <th>제품명</th>
-              <th>제품 링크</th>
-              <th style={{ textAlign: "right" }}>클릭수</th>
-            </tr>
-          </thead>
-          <tbody>
-            {agg.map((r, i) => (
-              <tr key={i} style={{ background: "#fff", border: "1px solid #eee" }}>
-                <td style={{ padding: "8px 10px" }}>
-                  {r.post_id ? <Link href={`/post/${r.post_id}`}>{r.post_title ?? r.post_id}</Link> : <span>-</span>}
-                </td>
-                <td style={{ padding: "8px 10px" }}>{r.brand ?? "-"}</td>
-                <td style={{ padding: "8px 10px" }}>{r.name ?? "-"}</td>
-                <td style={{ padding: "8px 10px", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {r.link ? <a href={r.link} target="_blank" rel="noopener noreferrer">{r.link}</a> : "-"}
-                </td>
-                <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 600 }}>{r.clicks}</td>
+      {/* 일별 추이 */}
+      <section className={styles.section}>
+        <h3 className={styles.tableTitle}>최근 추이</h3>
+        <div className={styles.tableWrap}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th className={styles.tableCell}>날짜</th>
+                <th className={styles.tableCell}>방문</th>
+                <th className={styles.tableCell}>제품 클릭</th>
               </tr>
+            </thead>
+            <tbody>
+              {(daily || []).map((r: any) => (
+                <tr key={String(r.day)} className={styles.tableRow}>
+                  <td className={styles.tableCell}>{new Date(r.day).toLocaleDateString()}</td>
+                  <td className={styles.tableCell}>{formatNumber(r.page_views || 0)}</td>
+                  <td className={styles.tableCell}>{formatNumber(r.product_clicks || 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* 제품 클릭 상세 테이블 */}
+      <section className={styles.section}>
+        <h3 className={styles.tableTitle}>제품 클릭 상세</h3>
+        <div className={styles.tableWrap}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th className={styles.tableCell} style={{ width: "30%" }}>Post</th>
+                <th className={styles.tableCell}>브랜드</th>
+                <th className={styles.tableCell}>제품명</th>
+                <th className={styles.tableCell}>제품 링크</th>
+                <th className={styles.tableCellRight}>클릭수</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agg.map((r, i) => (
+                <tr key={i} className={styles.tableRow}>
+                  <td className={styles.tableCell}>
+                    <div className={styles.tableCellLink}>
+                      {r.post_id ? (
+                        <Link
+                          href={`/admin/posts/${r.post_id}`}
+                          className={styles.postThumbLink}
+                          aria-label={r.post_title ? `${r.post_title} 상세` : "포스트 상세"}
+                        >
+                          <span className={styles.postThumb}>
+                            {r.post_cover_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={r.post_cover_url} alt="" className={styles.postThumbImg} />
+                            ) : (
+                              <span className={styles.postThumbPlaceholder}>이미지 없음</span>
+                            )}
+                          </span>
+                        </Link>
+                      ) : (
+                        <span className={styles.postThumbPlaceholder}>이미지 없음</span>
+                      )}
+                      <span className={styles.postThumbInfo}>{r.post_title ?? "제목 없음"}</span>
+                    </div>
+                  </td>
+                  <td className={styles.tableCell}>{r.brand ?? "-"}</td>
+                  <td className={styles.tableCell}>{r.name ?? "-"}</td>
+                  <td className={styles.tableCellLink}>
+                    {r.link ? (
+                      <a
+                        href={r.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`${styles.btn} ${styles.btnSecondary} ${styles.btnSmall}`}
+                      >
+                        링크 열기
+                      </a>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className={styles.tableCellRight}>{formatNumber(r.clicks)}</td>
+                </tr>
             ))}
           </tbody>
         </table>
+        </div>
+        <div className={styles.clickList}>
+          {agg.map((r, i) => (
+            <article key={i} className={styles.clickCard}>
+              <div className={styles.clickCardHeader}>
+                {r.post_id ? (
+                  <Link
+                    href={`/admin/posts/${r.post_id}`}
+                    className={styles.postThumbLink}
+                    aria-label={r.post_title ? `${r.post_title} 상세` : "포스트 상세"}
+                  >
+                    <span className={styles.postThumb}>
+                      {r.post_cover_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={r.post_cover_url} alt="" className={styles.postThumbImg} />
+                      ) : (
+                        <span className={styles.postThumbPlaceholder}>이미지 없음</span>
+                      )}
+                    </span>
+                  </Link>
+                ) : (
+                  <span className={styles.postThumbPlaceholder}>이미지 없음</span>
+                )}
+                <div className={styles.clickCardHeaderDetails}>
+                  <div className={styles.clickCardTitle}>{r.post_title ?? "제목 없음"}</div>
+                  <div className={styles.clickCardMetric}>{formatNumber(r.clicks)} 클릭</div>
+                </div>
+              </div>
+              <div className={styles.clickCardMeta}>
+                <span>브랜드</span>
+                <strong>{r.brand ?? "-"}</strong>
+                <span>제품명</span>
+                <strong>{r.name ?? "-"}</strong>
+              </div>
+              <div className={styles.clickCardActions}>
+                {r.link ? (
+                  <a
+                    href={r.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${styles.btn} ${styles.btnSecondary} ${styles.btnSmall}`}
+                  >
+                    링크 열기
+                  </a>
+                ) : (
+                  <span className={styles.clickCardEmpty}>링크 없음</span>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
     </main>
   );
